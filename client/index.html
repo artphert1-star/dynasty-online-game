@@ -24,7 +24,7 @@ const btn = (c, label, js) => `<button onclick="${js}" class="px-3 py-2 rounded 
 
 socket.on('connect', () => { if (code && !S) socket.emit('joinRoom', { code, name: localStorage.name || '', pid }); });
 socket.on('state', s => { S = s; code = s.code; localStorage.code = code; err = ''; render(); });
-socket.on('err', m => { err = m; render(); });
+socket.on('err', m => { err = m; if (!S) { localStorage.removeItem('code'); code = ''; } render(); });
 
 function create() { localStorage.name = nm(); socket.emit('createRoom', { name: nm(), pid }); }
 function join() { localStorage.name = nm(); code = document.getElementById('code').value.toUpperCase(); socket.emit('joinRoom', { code, name: nm(), pid }); }
@@ -35,7 +35,8 @@ const start = () => socket.emit('startGame', code);
 const court = c => socket.emit('court', { code, choice: c });
 const useSecret = i => socket.emit('secret', { code, idx: i, mode: document.getElementById('sm' + i).value, target: document.getElementById('st' + i).value });
 const sendOpts = () => socket.emit('opts', { code, defPay: +document.getElementById('dp').value, bribe: +document.getElementById('br').value });
-function leave() { localStorage.removeItem('code'); location.reload(); }
+function leave() { if (S && S.game && S.game.phase !== 'over' && !confirm('ออกจากห้อง? (กลับเข้าใหม่ได้ด้วยรหัสห้องเดิม)')) return; socket.emit('leaveRoom', code); localStorage.removeItem('code'); setTimeout(() => location.reload(), 150); }
+const rematch = () => socket.emit('rematch', code);
 
 function render() {
   const app = document.getElementById('app');
@@ -62,14 +63,15 @@ function lobby() {
   const host = S.host === S.me;
   return `<div class="max-w-2xl mx-auto mt-10 bg-gray-800 p-6 rounded-xl">
   <div class="text-center mb-4"><h2 class="text-xl font-bold text-amber-400">รหัสห้อง</h2><div class="text-5xl font-mono text-green-400 font-bold">${S.code}</div><p class="text-xs text-gray-400 mt-1">เล่น 3-6 คน (บอทนับเป็นผู้เล่น)</p></div>
+  <div class="text-right mb-2">${btn('bg-gray-700 hover:bg-red-700 text-xs', '⬅ ออกจากห้อง', 'leave()')}</div>
   <ul class="space-y-2 mb-4">${S.members.map(m => `<li class="p-2 bg-gray-700 rounded flex justify-between"><span>${esc(m.name)}</span><span class="text-xs">${m.bot ? m.style + (host ? ` <a class="text-red-400 cursor-pointer" onclick="rmBot('${m.pid}')">✕</a>` : '') : 'ผู้เล่น'}</span></li>`).join('')}</ul>
   ${host ? `<div class="grid grid-cols-3 gap-2 mb-4">${STYLES.map(([k, l]) => btn('bg-indigo-900 hover:bg-indigo-700 text-xs', l, `addBot('${k}')`)).join('')}</div>${btn('w-full bg-amber-500 text-gray-900 hover:bg-amber-400', 'เริ่มเกม!', 'start()')}` : '<p class="text-center text-gray-400">รอเจ้าของห้องเริ่มเกม…</p>'}
   <p class="text-red-400 text-sm mt-2">${esc(err)}</p></div>`;
 }
 function game(g, me) {
   const over = g.phase === 'over';
-  return `<div class="flex justify-between items-center mb-3"><h1 class="text-amber-400 font-bold text-xl">DYNASTY · ยุค ${g.era}/7</h1><span class="text-xs text-gray-400">ตลาดภรรยา: ${g.market.map(w => w.name + '($' + w.price + ')').join(', ') || '—'}</span></div>
-  ${over ? `<div class="bg-amber-600 p-4 rounded mb-3 text-center text-xl font-bold">🏆 ผู้ชนะ: ${esc(g.winner)} ${btn('bg-gray-900 ml-4', 'ออก', 'leave()')}</div>` : ''}
+  return `<div class="flex justify-between items-center mb-3"><h1 class="text-amber-400 font-bold text-xl">DYNASTY · ยุค ${g.era}/7</h1>${btn('bg-gray-700 hover:bg-red-700 text-xs', '⬅ ออก', 'leave()')}<span class="text-xs text-gray-400">ตลาดภรรยา: ${g.market.map(w => w.name + '($' + w.price + ')').join(', ') || '—'}</span></div>
+  ${over ? `<div class="bg-amber-600 p-4 rounded mb-3 text-center text-xl font-bold">🏆 ผู้ชนะ: ${esc(g.winner)} <div class="mt-2">${S.host === S.me ? btn('bg-gray-900 mr-2', '🔄 กลับล็อบบี้เล่นใหม่', 'rematch()') : '<span class="text-sm">รอเจ้าของห้องเริ่มรอบใหม่ หรือ</span>'} ${btn('bg-gray-900', 'ออก', 'leave()')}</div></div>` : ''}
   <div id="side"></div>
   <div id="cards" class="grid md:grid-cols-3 gap-3 mb-3">${g.players.map(p => card(p, me)).join('')}</div>
   <div id="orders"></div>
