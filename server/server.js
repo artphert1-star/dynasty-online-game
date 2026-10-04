@@ -27,17 +27,17 @@ function broadcast(room) {
 }
 function nextEra(room) {
   const g = room.game;
-  if (g.winner) return broadcast(room);
+  if (!g || g.winner) return broadcast(room);
   g.startEra();
   tryResolve(room);
   broadcast(room);
 }
 function tryResolve(room) {
   const g = room.game;
-  if (g.phase === 'orders' && g.allIn()) {
+  if (g && g.phase === 'orders' && g.allIn()) {
     g.resolve();
     broadcast(room);
-    if (!g.winner) setTimeout(() => nextEra(room), 4000);
+    if (!g.winner) setTimeout(() => { if (room.game === g) nextEra(room); }, 4000);
   }
 }
 const find = (code, socket) => {
@@ -80,6 +80,19 @@ io.on('connection', socket => {
     if (room.members.length < 3) return socket.emit('err', 'ต้องมีอย่างน้อย 3 คน (เพิ่มบอทได้)');
     room.game = new Game(room.members.map(m => ({ id: m.pid, name: m.name, bot: m.bot, style: m.style })));
     nextEra(room);
+  });
+  socket.on('leaveRoom', code => {
+    const { room, pid } = find(code, socket); if (!room) return;
+    delete room.sockets[pid]; socket.leave(code);
+    if (!room.game) room.members = room.members.filter(m => m.pid !== pid);
+    const humans = room.members.filter(m => !m.bot && room.sockets[m.pid]);
+    if (!humans.length) { delete rooms[code]; return; }
+    if (!room.game) { while (room.members[0].bot) room.members.push(room.members.shift()); broadcast(room); }
+  });
+  socket.on('rematch', code => {
+    const { room, pid, g } = find(code, socket);
+    if (!g || g.phase !== 'over' || pid !== room.members[0].pid) return;
+    room.game = null; broadcast(room);
   });
   socket.on('submit', ({ code, orders }) => {
     const { room, pid, g } = find(code, socket); if (!g || g.phase !== 'orders') return;
