@@ -2,7 +2,7 @@
 <html lang="th">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dynasty Online (v0.8)</title>
+<title>Dynasty Online (rules v0.12)</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 <style>
@@ -27,29 +27,31 @@ const DESC = {
  guard:'[ลำดับ 1] ได้เต๋าป้องกันเพิ่ม +2 เมื่อถูกสืบ ลักพาตัว หรือลอบสังหารในยุคนี้',
  lobby:'[ลำดับ 1] เลือกผู้เล่น: สนับสนุน = เต๋าขอเลื่อนยศของเขา +2 / ขัดขวาง = −2',
  realm:'[ลำดับ 2] รีดภาษี = ได้เงิน (ยศ+1) แต่ไม่สงบ +1 · เกณฑ์ทหาร = จ่ายสูงสุด 2 ได้ทหารเท่ากัน (ถือได้ไม่เกิน 4)',
- intrigue:'[ลำดับ 3] สืบ = ชนะแล้วได้การ์ดความลับของเป้าหมาย (ถ้าสำเร็จ 0 จะถูกสวนกลับ) · แอบสมสู่ = ต้องมีภรรยาทั้งคู่ ได้ ≥2 ได้ความลับค่า 3',
- kidnap:'[ลำดับ 4] ถ้าชนะ ทายาทของเป้าหมายถูกกักราว 3 ยุค (ขึ้นครองไม่ได้) และเป้าหมายไม่สงบ +1',
+ intrigue:'[ลำดับ 3] สืบ = ชนะแล้วเลือก: ได้ความลับค่า 1 / ทำลายความลับที่เขาถือเกี่ยวกับคุณ / ชิงทายาทของคุณคืน (สำเร็จ 0 = ถูกสวนกลับ) · แอบสมสู่ = ต้องมีภรรยาทั้งคู่ ชนะและได้ ≥2 เลือกความลับค่า 3 หรือลูกลับ',
+ kidnap:'[ลำดับ 4] ชนะ = ทายาทถูกกัก ประกาศค่าไถ่ 1-4 เงิน (เปลี่ยนไม่ได้) เจ้าของไถ่ได้ทุกเมื่อ ไม่มีคืนอัตโนมัติ · เจ้าของไม่สงบ +1 · ถือตัวประกันได้ทีละ 1 คน',
  assassinate:'[ลำดับ 5] จ่ายเงินล่วงหน้า (2 หรือ 3 เงินเมื่อเล่น 3 คน) ถ้าชนะผู้นำ/ทายาทตาย · ถ้าผู้นำเป้าหมายตายไปแล้วในยุคนี้ คำสั่งถูกยกเลิกโดยไม่เสียเงิน',
  family:'[ลำดับ 6] แต่งงาน (ซื้อภรรยาจากตลาด ถ้าหลายคนเล็งใบเดียวกันทอยบารมีแย่ง) · ผลิตทายาท (ต้องมีภรรยา) · ฝึกทายาท (+1 ค่าที่เลือก)',
- petition:'[ลำดับ 7] ทอยเต๋า = บารมี + ทหารที่ใช้(≤2) + กำลังรบ÷2 + วิ่งเต้น + เงินเสริม(≤2) ต้องได้ตามเกณฑ์ของยศ (ที่นั่งเต็ม +1)',
+ petition:'[ลำดับ 7] ทอยเต๋า = บารมี + ทหารที่ใช้(≤2) + กำลังรบ÷2 + วิ่งเต้น + โบนัสทายาท + เงินเสริม(≤2) ต้องได้ตามเกณฑ์ของยศ (ที่นั่งเต็ม +1 และคุณเลือกคนที่ถูกลดยศ)',
  decoy:'ไม่มีผล ใช้หลอกว่าวางคำสั่งไว้เยอะ' };
 const OPTS = { lobby:[['support','สนับสนุน'],['oppose','ขัดขวาง']], realm:[['tax','รีดภาษี'],['recruit','เกณฑ์ทหาร']], intrigue:[['spy','สืบข่าว'],['tryst','แอบสมสู่']], assassinate:[['leader','ผู้นำ'],['heir','ทายาท']], family:[['marry','แต่งงาน'],['breed','ผลิตทายาท'],['train','ฝึกทายาท']] };
 const NEEDT = ['lobby','intrigue','kidnap','assassinate'], NEEDPAY = ['intrigue','kidnap','assassinate','petition'];
 const COURT = { 'ขุนนางขอที่ดิน':'A จ่าย 2 → ไม่สงบ −1 | B ปฏิเสธ → บารมีสะสม +1 แต่ไม่สงบ +1', 'ทูตต่างแดน':'A จ่าย 1 → ทหาร 1 | B ไม่มีผล', 'เรื่องอื้อฉาว':'A จ่าย 2 ปกปิด | B ผู้เล่นซ้ายได้ความลับ 1 ของคุณ', 'ทายาทดื้อรั้น':'A ทายาท +1 ค่า แต่ไม่สงบ +1 | B ไม่มีผล', 'พ่อค้าเสนอส่วย':'A ได้เงิน 3 แต่ไม่สงบ +1 | B บารมีสะสม +1', 'ผู้อาวุโสขอคำปรึกษา':'A ทอยบารมี ≥1 → บารมีสะสม +1 ไม่งั้นเสียเงิน 1 | B ไม่มีผล' };
-const EVENT = { drought:['🌵 ภัยแล้ง','รีดภาษียุคนี้ทำให้ไม่สงบ +2 แทน +1'], border:['⚔️ ศึกชายแดน','ทุกคนทอยกำลังรบ ได้ <2 ไม่สงบ +1'], feast:['🎉 งานเลี้ยง','(ยังไม่มีผลในระบบเวอร์ชันนี้)'], plague:['☠️ โรคระบาด','ทอยความชราตายง่ายขึ้น +1 (เริ่มมีผลตั้งแต่ยุค 5)'] };
+const EVENT = { drought:['🌵 ภัยแล้ง','รีดภาษียุคนี้ทำให้ไม่สงบ +2 แทน +1'], border:['⚔️ ศึกชายแดน','ทุกคนทอยกำลังรบ ได้ <2 ไม่สงบ +1'], feast:['🎉 งานเลี้ยงหลวง','จ่ายเงิน 2 แลกบารมี 1 ได้ไม่จำกัด (ปุ่มด้านล่างตอนวางคำสั่ง)'], plague:['☠️ โรคระบาด','ปลายยุคทอยความชราด้วยระดับวัย +1 (แม้ก่อนยุค 4)'] };
 const T = {
  rank:'ยศ I–V: ยิ่งสูงยิ่งได้เงินเดือนและช่องวางคำสั่งมากขึ้น ถึงยศ V = จักรพรรดิ ชนะทันที',
  i:'บารมี (ค่าผู้นำ+ภรรยา สูงสุด 6): เป็นเต๋าตอนขอเลื่อนยศและแย่งภรรยา',
  n:'เล่ห์เหลี่ยม (สูงสุด 6): เป็นเต๋าฝ่ายโจมตี คือสืบ แอบสมสู่ ลักพาตัว ลอบสังหาร',
  m:'กำลังรบ (สูงสุด 6): เต๋าป้องกัน, ปราบกบฏ และหาร 2 เป็นเต๋าตอนขอเลื่อนยศ',
  gold:'เงิน: ใช้ลอบสังหาร ซื้อภรรยา เสริมเต๋า (สูงสุด +2 ต่อการทอย) และติดสินบนลดความไม่สงบ',
- inf:'แต้มอิทธิพลสะสม: ใช้ตัดสินผู้ชนะเมื่อจบ 7 ยุคแล้วยศเท่ากัน',
+ inf:'บารมีสะสม: ได้จากขึ้นยศ ชนะกบฏ เปิดโปง · 2 บารมี = 1 คะแนนราชวงศ์ (สูงสุด 8) · ใช้ตัดสินเสมอ',
+ score:'คะแนนราชวงศ์ (ใช้ตัดสินเมื่อครบ 7 ยุคไม่มีจักรพรรดิ): ยศ I/II/III/IV = 0/1/3/5 + บารมี÷2 (≤8) + ทายาท 2 + เงิน÷5 (≤3) − 1 ถ้าไม่สงบ ≥4 · ตัวเลขที่เห็นยังไม่รวมการ์ดความลับ',
+ capt:'ทายาทถูกลักพาตัว: ไถ่คืนได้ทุกเมื่อด้วยค่าไถ่ที่ประกาศ (ขาดเงินใช้บารมีแทนได้ ≤2) ถ้าผู้นำตายระบบไถ่ให้อัตโนมัติเมื่อเงินพอ',
  unrest:'ความไม่สงบ: ถึง 6 เกิดกบฏทันที ทอยกำลังรบสู้ แพ้ = ยศลด เสียเงิน 3',
  sol:'ทหาร (สูงสุด 4): ใช้เสริมเต๋าขอเลื่อนยศหรือปราบกบฏได้ครั้งละไม่เกิน 2',
  wife:'ภรรยา: ให้โบนัสค่า 1 อย่าง บางใบมีของแถม (เงิน/ทหาร/เลื่อนยศ)',
- heir:'ทายาท: ถ้าผู้นำตายจะขึ้นครองต่อ ถ้าไม่มีจะได้ผู้สำเร็จราชการ (2/2/2) ไม่สงบ +3',
+ heir:'ทายาท: ผู้นำตายจะขึ้นครองต่อ (ไม่มี = ผู้สำเร็จราชการ 2/2/2 ไม่สงบ +3) · ค่าทายาทที่ถึง 3 ให้เต๋า +1 กับค่านั้นของผู้นำทันที (ถูกลักพาตัว/ลอบสังหารแล้วเสียโบนัส)',
  seal:'ตราประทับ 🔰: ผู้ถือได้แก้ผลก่อนเมื่อคำสั่งลำดับเท่ากัน หมุนทุกยุค',
- sec:'การ์ดความลับ: ใช้ได้ 1 ใบต่อยุค (รีดไถ/เปิดโปง/ปิดปาก)',
+ sec:'การ์ดความลับ (ถือได้ 3 ใบ): ใช้ 1 ใบ/ยุคในหน้าต่างความลับ หรือเก็บไว้จนจบเกมเพื่อคะแนน (ผู้ถือ +1/+2 เป้าหมาย −1/−2) · ทุกคนเห็นเป้าหมายของการ์ดแต่ไม่เห็นค่า',
  tok:'โทเคนคว่ำ: จำนวนคำสั่งที่วางแล้ว (คนอื่นไม่เห็นชนิด)' };
 const tip = (t, label) => `<span class="tip" tabindex="0" data-t="${esc(t)}">${label}</span>`;
 const STYLES = [['assassin','🗡️ Assassin'],['climber','🧗 Climber'],['warlord','⚔️ Warlord'],['balanced','⚖️ Balanced'],['schemer','📜 Schemer'],['turtle','🛡️ Turtle']];
@@ -69,8 +71,13 @@ const rmBot = p => socket.emit('removeBot', { code, pid: p });
 const start = () => socket.emit('startGame', code);
 const court = c => socket.emit('court', { code, choice: c });
 const rollDice = () => socket.emit('rollDice', code);
-const useSecret = i => socket.emit('secret', { code, idx: i, mode: $('sm' + i).value, target: $('st' + i).value });
-const sendOpts = () => socket.emit('opts', { code, defPay: +$('dp').value, bribe: +$('br').value });
+let OPT = { dp: 0, br: 0, rc: false };
+const useSecret = i => socket.emit('secret', { code, idx: i, mode: $('sm' + i).value, tok: $('tk' + i) ? +$('tk' + i).value : -1 });
+const sendOpts = () => { OPT = { dp: +$('dp').value, br: +$('br').value, rc: $('rc').checked }; socket.emit('opts', { code, defPay: OPT.dp, bribe: OPT.br, rejectChild: OPT.rc }); };
+const ready = () => socket.emit('ready', code);
+const ransom = () => socket.emit('ransom', code);
+const releaseHostage = () => socket.emit('release', code);
+const feast = () => socket.emit('feast', code);
 const rematch = () => socket.emit('rematch', code);
 function leave() { if (S && S.game && S.game.phase !== 'over' && !confirm('ออกจากห้อง? (กลับเข้าใหม่ได้ด้วยรหัสห้องเดิม)')) return; socket.emit('leaveRoom', code); localStorage.removeItem('code'); setTimeout(() => location.reload(), 150); }
 
@@ -86,7 +93,7 @@ function render() {
 }
 function home() {
   return `<div class="max-w-md mx-auto mt-10 bg-gray-800 p-8 rounded-xl border border-amber-500/50 text-center">
-  <h1 class="text-4xl font-extrabold text-amber-500">DYNASTY</h1><p class="text-gray-400 text-sm mb-6">Playtest v0.8</p>
+  <h1 class="text-4xl font-extrabold text-amber-500">DYNASTY</h1><p class="text-gray-400 text-sm mb-6">Playtest · กติกา v0.12</p>
   <input id="name" value="${esc(localStorage.name || '')}" placeholder="ชื่อตระกูล" class="w-full p-3 mb-4 rounded bg-gray-700 text-center outline-none">
   ${btn('w-full bg-amber-600 hover:bg-amber-500 mb-4', 'สร้างห้องใหม่', 'create()')}
   <div class="flex gap-2"><input id="code" maxlength="6" placeholder="รหัส 6 หลัก" class="flex-grow p-3 rounded bg-gray-700 text-center uppercase outline-none">${btn('bg-green-600 hover:bg-green-500', 'Join', 'join()')}</div>
@@ -117,7 +124,8 @@ function game(g, me) {
   <details class="bg-gray-800 rounded p-3 mb-3 text-xs"><summary class="cursor-pointer font-bold text-amber-300">📖 คู่มือย่อ: ความหมายของค่าและคำสั่ง</summary>
    <div class="grid md:grid-cols-2 gap-x-6 gap-y-1 mt-2">${Object.entries(T).map(([k, v]) => `<div>• ${v}</div>`).join('')}</div>
    <div class="mt-2 font-bold text-amber-300">คำสั่ง (เรียงตามลำดับแก้ผล)</div>${Object.entries(TYPES).map(([k, l]) => `<div>${l}: ${DESC[k]}</div>`).join('')}
-   <div class="mt-2 text-gray-400">เต๋า: ทอย d6 ลูกละ 4-6 = สำเร็จ · ใช้ได้สูงสุด 10 ลูก · เสมอ = ฝ่ายป้องกันชนะ</div></details>
+   <div class="mt-2 text-gray-400">ลำดับยุค: เหตุการณ์ → การ์ดราชสำนัก → รายได้ → วางคำสั่งลับ → เปิดคำสั่ง → <b>หน้าต่างความลับ</b> → แก้ผล → ปลายยุค (ติดสินบน, ทอยวัยตั้งแต่ยุค 4)</div>
+   <div class="mt-1 text-gray-400">เต๋า: ทอย d6 ลูกละ 4-6 = สำเร็จ · ใช้ได้สูงสุด 10 ลูก · เสมอ = ฝ่ายป้องกันชนะ</div></details>
   <div class="bg-gray-800 p-3 rounded text-xs space-y-1 max-h-56 overflow-y-auto" id="log">${[...g.log].reverse().map(l => `<div>• ${esc(l)}</div>`).join('')}</div>`;
 }
 function mainPanels(g, me) {
@@ -143,20 +151,22 @@ function card(p, me) {
    <div class="bg-gray-700 p-1">${tip(T.i, '✨ บารมี')} ${p.st.i}</div><div class="bg-gray-700 p-1">${tip(T.n, '🕵️ เล่ห์')} ${p.st.n}</div><div class="bg-gray-700 p-1">${tip(T.m, '⚔️ รบ')} ${p.st.m}</div>
    <div class="bg-gray-700 p-1 text-yellow-400">${tip(T.gold, '💰 เงิน')} ${p.money}</div><div class="bg-gray-700 p-1">${tip(T.inf, '👑 แต้ม')} ${p.inf}</div><div class="bg-gray-700 p-1 text-red-400">${tip(T.unrest, '🔥 ไม่สงบ')} ${p.unrest}/6</div></div>
   <div class="text-xs mt-2 text-gray-400">${tip(T.wife, 'ภรรยา')}: ${p.wife ? esc(p.wife.name) : '—'} · ${tip(T.heir, 'ทายาท')}: ${mine ? (p.heir ? esc(p.heir.name) : '—') : (p.heirKnown ? 'มี' : '—')}${p.heirK ? ' (ถูกกัก)' : ''}<br>
-  ${tip(T.sec, 'ความลับ')} ${p.secretCount} · ${tip(T.tok, 'โทเคนคว่ำ')} ${p.tokensPlaced}${mine ? ` · ${tip(T.sol, 'ทหาร')} ${p.soldiers}` : ''}</div></div>`;
+  ${tip(T.sec, 'ความลับ')} ${p.secretAbout.length}${p.secretAbout.length ? ' (เกี่ยวกับ ' + p.secretAbout.map(a => esc((nameOf(a) || '?'))).join(', ') + ')' : ''} · ${tip(T.tok, 'โทเคนคว่ำ')} ${p.tokensPlaced}${mine ? ` · ${tip(T.sol, 'ทหาร')} ${p.soldiers}` : ''}<br>${tip(T.score, '🏅 คะแนนราชวงศ์')} ${p.score}${p.hb && (p.hb.i + p.hb.n + p.hb.m) ? ' · โบนัสทายาท: ' + ['i', 'n', 'm'].filter(k => p.hb[k]).map(k => ({ i: 'บารมี', n: 'เล่ห์', m: 'รบ' })[k]).join('/') + ' +1' : ''}
+  ${p.capt ? `<br>${tip(T.capt, '⛓️ ทายาทถูกกัก')} ค่าไถ่ ${p.capt.ransom}` : ''}${p.holding ? `<br>⛓️ กักทายาทของ ${esc(nameOf(p.holding.owner))} (ค่าไถ่ ${p.holding.ransom})` : ''}</div></div>`;
 }
+const nameOf = id => { const q = S && S.game && S.game.players.find(p => p.id === id); return q && q.name; };
 const seatCap = (r, n) => r === 3 ? n - 1 : r === 4 ? 2 : r === 5 ? 1 : 99;
 function binomAtLeast(n, k) { if (k <= 0) return 1; if (k > n) return 0; let s = 0, c = 1; for (let i = 0; i <= n; i++) { if (i >= k) s += c; c = c * (n - i) / (i + 1); } return s / Math.pow(2, n); }
 function dash(g, me) {
   const n = g.players.length, rows = [...g.players].sort((a, b) => b.rank - a.rank || b.inf - a.inf || b.money - a.money);
-  let h = `<div class="space-y-3"><div class="bg-gray-800 p-3 rounded"><div class="font-bold text-amber-300 text-sm mb-2">📊 อันดับ (ยศ → แต้ม → เงิน)</div>
-  <table class="w-full text-xs"><tr class="text-gray-400"><td></td><td>ชื่อ</td><td>${tip(T.rank, 'ยศ')}</td><td>${tip(T.inf, '👑')}</td><td>${tip(T.gold, '💰')}</td><td>${tip(T.unrest, '🔥 ไม่สงบ')}</td></tr>
-  ${rows.map((p, i) => `<tr class="${p.id === me.id ? 'text-amber-300' : ''}"><td>${i + 1}</td><td>${esc(p.name)}</td><td>${RANK[p.rank - 1]}</td><td>${p.inf}</td><td>${p.money}</td><td><div class="bg-gray-700 h-2 rounded w-full"><div class="h-2 rounded ${p.unrest >= 4 ? 'bg-red-500' : 'bg-orange-400'}" style="width:${p.unrest / 6 * 100}%"></div></div></td></tr>`).join('')}</table></div>
+  let h = `<div class="space-y-3"><div class="bg-gray-800 p-3 rounded"><div class="font-bold text-amber-300 text-sm mb-2">📊 อันดับ (ยศ → บารมี → เงิน) · 🏅 = คะแนนราชวงศ์ปัจจุบัน</div>
+  <table class="w-full text-xs"><tr class="text-gray-400"><td></td><td>ชื่อ</td><td>${tip(T.rank, 'ยศ')}</td><td>${tip(T.score, '🏅')}</td><td>${tip(T.inf, '👑')}</td><td>${tip(T.gold, '💰')}</td><td>${tip(T.unrest, '🔥 ไม่สงบ')}</td></tr>
+  ${rows.map((p, i) => `<tr class="${p.id === me.id ? 'text-amber-300' : ''}"><td>${i + 1}</td><td>${esc(p.name)}</td><td>${RANK[p.rank - 1]}</td><td>${p.score}</td><td>${p.inf}</td><td>${p.money}</td><td><div class="bg-gray-700 h-2 rounded w-full"><div class="h-2 rounded ${p.unrest >= 4 ? 'bg-red-500' : 'bg-orange-400'}" style="width:${p.unrest / 6 * 100}%"></div></div></td></tr>`).join('')}</table></div>
   <div class="bg-gray-800 p-3 rounded text-xs"><div class="font-bold text-amber-300 text-sm mb-1">🪑 ที่นั่งยศสูง</div>${[3, 4, 5].map(r => { const hs = g.players.filter(p => p.rank === r), cap = seatCap(r, n); return `<div>ยศ ${RANK[r - 1]} (${hs.length}/${cap}): ${hs.map(p => esc(p.name)).join(', ') || 'ว่าง'}</div>`; }).join('')}
    <div class="text-gray-400 mt-1">ที่นั่งเต็ม = ขอเลื่อนยศยากขึ้น +1 และผู้ถือที่แต้มน้อยสุดถูกลดยศ</div></div>`;
   if (me.rank < 5) {
-    const dice = Math.min(10, me.st.i + Math.min(2, me.soldiers || 0) + Math.floor(me.st.m / 2)), full = g.players.filter(p => p.rank === me.rank + 1).length >= seatCap(me.rank + 1, n), need = TH[me.rank - 1] + (full ? 1 : 0);
-    h += `<div class="bg-gray-800 p-3 rounded text-xs"><div class="font-bold text-amber-300 text-sm mb-1">📜 โอกาสขอเลื่อนยศของคุณ</div>เต๋าพื้นฐาน ${dice} ลูก (บารมี ${me.st.i} + ทหาร ${Math.min(2, me.soldiers || 0)} + รบ÷2 ${Math.floor(me.st.m / 2)}) ต้องได้ ≥ ${need}${full ? ' (ที่นั่งเต็ม)' : ''}<br>โอกาสสำเร็จ ≈ <b>${Math.round(binomAtLeast(dice, need) * 100)}%</b> <span class="text-gray-400">(ยังไม่รวมวิ่งเต้นและเงินเสริม)</span><br>เงินเดือนยุคหน้า: <b>${SAL[me.rank - 1]}</b> · ช่องคำสั่ง: <b>${SLOTS[me.rank - 1]}</b></div>`;
+    const dice = Math.min(10, me.st.i + (me.hb ? me.hb.i : 0) + Math.min(2, me.soldiers || 0) + Math.floor(me.st.m / 2)), full = g.players.filter(p => p.rank === me.rank + 1).length >= seatCap(me.rank + 1, n), need = TH[me.rank - 1] + (full ? 1 : 0);
+    h += `<div class="bg-gray-800 p-3 rounded text-xs"><div class="font-bold text-amber-300 text-sm mb-1">📜 โอกาสขอเลื่อนยศของคุณ</div>เต๋าพื้นฐาน ${dice} ลูก (บารมี ${me.st.i}${me.hb && me.hb.i ? ' + ทายาท 1' : ''} + ทหาร ${Math.min(2, me.soldiers || 0)} + รบ÷2 ${Math.floor(me.st.m / 2)}) ต้องได้ ≥ ${need}${full ? ' (ที่นั่งเต็ม)' : ''}<br>โอกาสสำเร็จ ≈ <b>${Math.round(binomAtLeast(dice, need) * 100)}%</b> <span class="text-gray-400">(ยังไม่รวมวิ่งเต้นและเงินเสริม)</span><br>เงินเดือนยุคหน้า: <b>${SAL[me.rank - 1]}</b> · ช่องคำสั่ง: <b>${SLOTS[me.rank - 1]}</b></div>`;
   }
   return h + chart(g) + '</div>';
 }
@@ -167,20 +177,42 @@ function chart(g) {
   return `<div class="bg-gray-800 p-3 rounded text-xs"><div class="font-bold text-amber-300 text-sm mb-1">📈 ยศรายยุค</div><svg viewBox="0 0 ${W} ${Ht}" class="w-full">${[1,2,3,4,5].map(r => `<text x="2" y="${y(r) + 3}" fill="#6b7280" font-size="8">${RANK[r - 1]}</text><line x1="16" x2="${W}" y1="${y(r)}" y2="${y(r)}" stroke="#374151" stroke-width=".5"/>`).join('')}${lines}</svg>
   <div class="flex flex-wrap gap-2">${g.players.map((p, i) => `<span style="color:${COLORS[i % 6]}">● ${esc(p.name)}</span>`).join('')}</div></div>`;
 }
+const optLabel = (type, v) => ((OPTS[type] || []).find(o => o[0] === v) || [0, ''])[1];
+const orderLabel = x => `${TYPES[x.type] || x.type}${x.target ? ' → ' + esc(nameOf(x.target) || '?') : ''}${x.opt ? ' (' + optLabel(x.type, x.opt) + ')' : ''}${x.type === 'kidnap' && x.ransom ? ' ค่าไถ่ ' + x.ransom : ''}`;
+function windowPanel(g, me) {
+  let h = `<div class="bg-gray-800 border border-amber-500 p-3 rounded mb-3"><b class="text-amber-300">🔓 เปิดคำสั่งแล้ว · หน้าต่างความลับ</b> <span class="text-xs text-gray-400">รอ: ${esc(S.waiting.join(', ') || '—')}</span>
+  <table class="w-full text-xs mt-2">${(g.orders || []).map(o => `<tr class="border-t border-gray-700"><td class="pr-2 py-1 text-amber-200 whitespace-nowrap">${esc(nameOf(o.pid) || '')}</td><td>${o.list.map(orderLabel).join(' · ') || '—'}</td></tr>`).join('')}</table>`;
+  if (!me.ready && me.secrets && me.secrets.length && !g.usedSec) {
+    h += `<div class="mt-2 font-bold text-sm">ใช้การ์ดความลับ (1 ใบ/ยุค ใช้สำเร็จ = เต๋าเสริม +1 ตอนขอเลื่อนยศ)</div><div class="text-xs text-gray-400">รีดไถ = เป้าหมายจ่าย 2×ค่า หรือเสียบารมีเท่าค่า · เปิดโปง = เป้าหมายเสียบารมีเท่าค่า ไม่สงบ +1 คุณได้บารมี +1 · ปิดปาก = ยกเลิกโทเคน 1 อันของเป้าหมาย · บีบบังคับ = เป้าหมายต้องวิ่งเต้นสนับสนุนคุณ (ถ้ายังไม่ได้วางวิ่งเต้น)</div>`;
+    h += me.secrets.map((c, i) => {
+      const tl = ((g.orders || []).find(o => o.pid === c.about) || { list: [] }).list;
+      return `<div class="flex flex-wrap gap-2 items-center text-xs mt-1">${c.child ? '👶 ลูกลับ (นับเป็นค่า 3)' : 'ค่า ' + c.v} เกี่ยวกับ ${esc(nameOf(c.about) || '?')}
+      <select id="sm${i}" class="bg-gray-700 p-1"><option value="extort">รีดไถ</option><option value="expose">เปิดโปง</option><option value="hush">ปิดปาก</option><option value="force">บีบบังคับ</option></select>
+      <select id="tk${i}" class="bg-gray-700 p-1">${tl.map((x, k) => `<option value="${k}">ปิดปาก: ${esc(TYPES[x.type] || x.type)}</option>`).join('')}</select>${btn('bg-red-700 text-xs', 'ใช้', `useSecret(${i})`)}</div>`;
+    }).join('');
+  }
+  h += me.ready ? `<div class="text-xs text-gray-400 mt-2">คุณพร้อมแล้ว รอคนอื่น…</div>` : `<div class="mt-2">${btn('bg-amber-500 text-gray-900', '✔ พร้อม — เริ่มแก้ผล', 'ready()')}</div>`;
+  return h + '</div>';
+}
 function updateSide(g, me) {
   const el = $('side'); if (!el) return;
   let h = '';
+  const acts = [];
+  if (me.capt && g.phase !== 'resolve' && g.phase !== 'over') acts.push(btn('bg-red-700 text-xs', `⛓️ ไถ่ทายาท (ค่าไถ่ ${me.capt.ransom})`, 'ransom()'));
+  if (me.holding && g.phase !== 'resolve' && g.phase !== 'over') acts.push(btn('bg-gray-600 text-xs', `🕊️ ปล่อยตัวทายาทของ ${esc(nameOf(me.holding.owner) || '')}`, 'releaseHostage()'));
+  if (g.feast && g.phase === 'orders') acts.push(btn('bg-yellow-700 text-xs', '🎉 งานเลี้ยงหลวง: จ่าย 2 แลกบารมี 1', 'feast()'));
+  if (acts.length) h += `<div class="bg-gray-800 p-2 rounded mb-3 flex flex-wrap gap-2">${acts.join('')}</div>`;
   if (g.phase === 'orders') {
     if (me.court) h += `<div class="bg-purple-900/60 p-3 rounded mb-3"><b>การ์ดราชสำนัก: ${esc(me.court)}</b><div class="text-xs my-1">${COURT[me.court] || ''}</div>${btn('bg-purple-600', 'เลือก A', "court('A')")} ${btn('bg-gray-600', 'เลือก B', "court('B')")}</div>`;
-    if (me.secrets && me.secrets.length && !g.usedSec && !me.placed) h += `<div class="bg-gray-800 p-3 rounded mb-3"><b>การ์ดความลับ (ใช้ได้ 1 ใบ/ยุค)</b><div class="text-xs text-gray-400">รีดไถ = เป้าหมายจ่าย 2×ค่า หรือเสียแต้ม · เปิดโปง = เป้าหมายเสียแต้ม ไม่สงบ +1 คุณได้แต้ม · ปิดปาก = ยกเลิกโทเคนของเป้าหมาย 1 ใบ (ถ้าเขายังไม่ยืนยัน)</div>` + me.secrets.map((s, i) => {
-      const t = g.players.find(p => p.id === s.about);
-      return `<div class="flex gap-2 items-center text-xs mt-1">ค่า ${s.v} เกี่ยวกับ ${t ? esc(t.name) : '?'}<select id="sm${i}" class="bg-gray-700 p-1"><option value="extort">รีดไถ</option><option value="expose">เปิดโปง</option><option value="hush">ปิดปาก</option></select><input type="hidden" id="st${i}" value="${s.about}">${btn('bg-red-700 text-xs', 'ใช้', `useSecret(${i})`)}</div>`;
-    }).join('') + '</div>';
-    h += `<div class="bg-gray-800 p-2 rounded mb-3 text-xs flex flex-wrap gap-4 items-center">ตั้งค่า: จ่ายเต๋าป้องกันเมื่อถูกโจมตี <select id="dp" onchange="sendOpts()" class="bg-gray-700"><option>0</option><option>1</option><option>2</option></select> ติดสินบนลดไม่สงบปลายยุค <select id="br" onchange="sendOpts()" class="bg-gray-700"><option>0</option><option>1</option><option>2</option></select> <span class="text-gray-400">(หน่วยเป็นเงิน)</span></div>`;
+    h += `<div class="bg-gray-800 p-2 rounded mb-3 text-xs flex flex-wrap gap-4 items-center">ตั้งค่า: จ่ายเต๋าป้องกันเมื่อถูกโจมตี <select id="dp" onchange="sendOpts()" class="bg-gray-700"><option>0</option><option>1</option><option>2</option></select> ติดสินบนลดไม่สงบปลายยุค <select id="br" onchange="sendOpts()" class="bg-gray-700"><option>0</option><option>1</option><option>2</option></select> <label><input type="checkbox" id="rc" onchange="sendOpts()"> ปฏิเสธลูกลับอัตโนมัติ (จ่าย 3 ถ้ามีเงิน)</label> <span class="text-gray-400">(หน่วยเป็นเงิน)</span></div>`;
     if (me.placed) h += `<div class="bg-gray-800 p-3 rounded mb-3 text-sm">วางคำสั่งแล้ว รอ: ${esc(S.waiting.join(', ') || '—')}</div>`;
   }
+  if (g.phase === 'window' && !S.replay) h += windowPanel(g, me);
   if (g.phase === 'between') h += `<div class="bg-gray-800 p-3 rounded mb-3 text-sm">กำลังเริ่มยุคถัดไป…</div>`;
-  if (el.dataset.h !== h) { el.innerHTML = h; el.dataset.h = h; }
+  if (el.dataset.h !== h) {
+    el.innerHTML = h; el.dataset.h = h;
+    if ($('dp')) { $('dp').value = OPT.dp; $('br').value = OPT.br; $('rc').checked = OPT.rc; }
+  }
 }
 function buildForm(g, me) {
   const slots = SLOTS[me.rank - 1], o = $('orders'); if (!slots) return;
@@ -192,12 +224,21 @@ function fillRow(i, g, me, type) {
   const reAt = `fillRow(${i},S.game,S.game.players.find(p=>p.id===S.me),`;
   let h = `<select id="t${i}" onchange="${reAt}this.value)" class="bg-gray-700 p-1">${Object.entries(TYPES).map(([k, l]) => `<option value="${k}" ${k === type ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
   if (NEEDT.includes(type)) h += sel('tg', g.players.filter(p => type === 'lobby' || p.id !== me.id).map(p => [p.id, p.name]));
-  if (OPTS[type]) h += `<select id="o${i}" class="bg-gray-700 p-1">${OPTS[type].map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select>`;
+  if (OPTS[type]) h += `<select id="o${i}" ${type === 'intrigue' ? `onchange="pickExtra(${i})"` : ''} class="bg-gray-700 p-1">${OPTS[type].map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select>`;
   if (type === 'family') h += `<span id="fx${i}"></span>`;
+  if (type === 'intrigue') h += `<span id="px${i}"></span>`;
+  if (type === 'kidnap') h += `ค่าไถ่ ` + sel('rs', [[1, 1], [2, 2], [3, 3], [4, 4]], 2);
+  if (type === 'petition') { const vs = g.players.filter(p => p.rank === me.rank + 1 && p.id !== me.id && me.rank + 1 < 5); if (vs.length) h += `ถ้าที่นั่งเต็ม ลดยศ ` + sel('vc', [['', 'อัตโนมัติ (บารมีน้อยสุด)'], ...vs.map(p => [p.id, p.name])]); }
   if (NEEDPAY.includes(type)) h += `จ่ายเสริมเต๋า ` + sel('p', [[0, 0], [1, 1], [2, 2]], 0);
   h += `<div class="w-full text-gray-400">${DESC[type]}</div>`;
   d.innerHTML = h;
   if (type === 'family') { $('o' + i).onchange = () => famExtra(i, g); famExtra(i, g); }
+  if (type === 'intrigue') pickExtra(i);
+}
+function pickExtra(i) {
+  const v = $('o' + i).value, el = $('px' + i);
+  const L = v === 'tryst' ? [['secret', 'ได้ความลับค่า 3'], ['child', 'ได้ลูกลับ']] : [['secret', 'ได้ความลับค่า 1'], ['destroy', 'ทำลายความลับที่เขาถือเกี่ยวกับฉัน'], ['release', 'ชิงทายาทฉันคืน']];
+  el.innerHTML = `<select id="pk${i}" class="bg-gray-700 p-1">${L.map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select>`;
 }
 function famExtra(i, g) {
   const v = $('o' + i).value, el = $('fx' + i);
@@ -207,7 +248,7 @@ function sendOrders() {
   const me = S.game.players.find(p => p.id === S.me), slots = SLOTS[me.rank - 1], out = [];
   for (let i = 0; i < slots; i++) {
     const type = $('t' + i).value;
-    out.push({ type, target: $('tg' + i) && $('tg' + i).value, opt: $('o' + i) && $('o' + i).value, pay: $('p' + i) ? +$('p' + i).value : 0, wife: $('w' + i) ? +$('w' + i).value : 0, stat: $('s' + i) && $('s' + i).value });
+    out.push({ type, target: $('tg' + i) && $('tg' + i).value, opt: $('o' + i) && $('o' + i).value, pay: $('p' + i) ? +$('p' + i).value : 0, wife: $('w' + i) ? +$('w' + i).value : 0, stat: $('s' + i) && $('s' + i).value, ransom: $('rs' + i) ? +$('rs' + i).value : undefined, pick: $('pk' + i) && $('pk' + i).value, victim: $('vc' + i) && $('vc' + i).value || undefined });
   }
   if (new Set(out.map(o => o.type)).size < out.length) return alert('คำสั่งซ้ำชนิดกันไม่ได้');
   socket.emit('submit', { code, orders: out });
