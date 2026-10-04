@@ -1,113 +1,139 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Dynasty Online (v0.8 Playtest)</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dynasty Online (v0.8)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 </head>
-<body class="bg-gray-900 text-white min-h-screen flex flex-col items-center p-4">
+<body class="bg-gray-900 text-white min-h-screen p-3">
+<div id="app" class="max-w-5xl mx-auto"></div>
+<script>
+const SERVER_URL = 'https://dynasty-online-game.onrender.com'; // เปลี่ยนเป็น URL ของ Render ถ้าต่างจากนี้
+const socket = io(SERVER_URL);
+const pid = localStorage.pid || (localStorage.pid = 'u' + Math.random().toString(36).slice(2, 10));
+let S = null, code = localStorage.code || '', formEra = -1, err = '';
+const RANK = ['I','II','III','IV','V'], SLOTS = [2,2,3,3,0];
+const TYPES = { guard:'🛡️ ป้องกัน', lobby:'📣 วิ่งเต้น', realm:'🏛️ กิจการเมือง', intrigue:'🕵️ สืบ/แอบสมสู่', kidnap:'⛓️ ลักพาตัว', assassinate:'🗡️ ลอบสังหาร', family:'💍 ครอบครัว', petition:'📜 ขอเลื่อนยศ', decoy:'🎭 ตัวลวง' };
+const OPTS = { lobby:[['support','สนับสนุน'],['oppose','ขัดขวาง']], realm:[['tax','รีดภาษี'],['recruit','เกณฑ์ทหาร']], intrigue:[['spy','สืบข่าว'],['tryst','แอบสมสู่']], assassinate:[['leader','ผู้นำ'],['heir','ทายาท']], family:[['marry','แต่งงาน'],['breed','ผลิตทายาท'],['train','ฝึกทายาท']] };
+const NEEDT = ['lobby','intrigue','kidnap','assassinate'], NEEDPAY = ['intrigue','kidnap','assassinate','petition'];
+const COURT = { 'ขุนนางขอที่ดิน':'A จ่าย 2 → ไม่สงบ −1 | B ปฏิเสธ → บารมี +1 แต่ไม่สงบ +1', 'ทูตต่างแดน':'A จ่าย 1 → ทหาร 1 | B ไม่มีผล', 'เรื่องอื้อฉาว':'A จ่าย 2 ปกปิด | B ผู้เล่นซ้ายได้ความลับ 1 ของคุณ', 'ทายาทดื้อรั้น':'A ทายาท +1 ค่า แต่ไม่สงบ +1 | B ไม่มีผล', 'พ่อค้าเสนอส่วย':'A ได้เงิน 3 แต่ไม่สงบ +1 | B บารมี +1', 'ผู้อาวุโสขอคำปรึกษา':'A ทอยบารมี ≥1 → บารมี +1 ไม่งั้นเสียเงิน 1 | B ไม่มีผล' };
+const STYLES = [['assassin','🗡️ Assassin'],['climber','🧗 Climber'],['warlord','⚔️ Warlord'],['balanced','⚖️ Balanced'],['schemer','📜 Schemer'],['turtle','🛡️ Turtle']];
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const btn = (c, label, js) => `<button onclick="${js}" class="px-3 py-2 rounded font-bold text-sm ${c}">${label}</button>`;
 
-  <div id="view-home" class="w-full max-w-md bg-gray-800 p-8 rounded-xl shadow-2xl border border-amber-500/50 mt-10 text-center">
-    <h1 class="text-4xl font-extrabold text-amber-500 mb-2">DYNASTY</h1>
-    <p class="text-gray-400 text-sm mb-6">Playtest v0.8</p>
-    <input id="input-name" type="text" placeholder="ชื่อตระกูล" class="w-full p-3 mb-4 rounded bg-gray-700 text-white text-center border border-gray-600 outline-none">
-    <button onclick="createRoom()" class="w-full py-3 bg-amber-600 hover:bg-amber-500 font-bold rounded mb-4">สร้างห้องใหม่</button>
-    <div class="flex space-x-2 mt-4">
-      <input id="input-code" type="text" placeholder="รหัส 6 หลัก" class="flex-grow p-3 rounded bg-gray-700 text-white text-center uppercase outline-none" maxlength="6">
-      <button onclick="joinRoom()" class="px-6 py-3 bg-green-600 hover:bg-green-500 font-bold rounded">Join</button>
-    </div>
-  </div>
+socket.on('connect', () => { if (code && !S) socket.emit('joinRoom', { code, name: localStorage.name || '', pid }); });
+socket.on('state', s => { S = s; code = s.code; localStorage.code = code; err = ''; render(); });
+socket.on('err', m => { err = m; render(); });
 
-  <div id="view-lobby" class="hidden w-full max-w-2xl bg-gray-800 p-6 rounded-xl mt-10">
-    <div class="text-center mb-6">
-      <h2 class="text-2xl font-bold text-amber-400">รหัสห้อง (Lobby)</h2>
-      <div id="display-code" class="text-5xl font-mono text-green-400 font-bold mt-2">------</div>
-    </div>
-    
-    <div id="host-controls" class="hidden border-t border-gray-700 pt-4">
-      <p class="text-sm text-gray-400 mb-2">เพิ่มบอทจำลองพฤติกรรม (v0.8):</p>
-      <div class="grid grid-cols-3 gap-2 mb-4">
-        <button onclick="addBot('Assassin')" class="p-2 bg-red-900/80 hover:bg-red-700 rounded text-xs">🗡️ Assassin</button>
-        <button onclick="addBot('Climber')" class="p-2 bg-blue-900/80 hover:bg-blue-700 rounded text-xs">🧗 Climber</button>
-        <button onclick="addBot('Warlord')" class="p-2 bg-orange-900/80 hover:bg-orange-700 rounded text-xs">⚔️ Warlord</button>
-        <button onclick="addBot('Balanced')" class="p-2 bg-purple-900/80 hover:bg-purple-700 rounded text-xs">⚖️ Balanced</button>
-        <button onclick="addBot('Schemer')" class="p-2 bg-indigo-900/80 hover:bg-indigo-700 rounded text-xs">📜 Schemer</button>
-        <button onclick="addBot('Turtle')" class="p-2 bg-green-900/80 hover:bg-green-700 rounded text-xs">🛡️ Turtle</button>
-      </div>
-      <button onclick="startGame()" class="w-full py-3 bg-amber-500 hover:bg-amber-400 text-gray-900 font-bold rounded">เริ่มเกม!</button>
-    </div>
-    <ul id="player-list" class="space-y-2 mt-4"></ul>
-  </div>
+function create() { localStorage.name = nm(); socket.emit('createRoom', { name: nm(), pid }); }
+function join() { localStorage.name = nm(); code = document.getElementById('code').value.toUpperCase(); socket.emit('joinRoom', { code, name: nm(), pid }); }
+const nm = () => document.getElementById('name').value;
+const addBot = style => socket.emit('addBot', { code, style });
+const rmBot = p => socket.emit('removeBot', { code, pid: p });
+const start = () => socket.emit('startGame', code);
+const court = c => socket.emit('court', { code, choice: c });
+const useSecret = i => socket.emit('secret', { code, idx: i, mode: document.getElementById('sm' + i).value, target: document.getElementById('st' + i).value });
+const sendOpts = () => socket.emit('opts', { code, defPay: +document.getElementById('dp').value, bribe: +document.getElementById('br').value });
+function leave() { localStorage.removeItem('code'); location.reload(); }
 
-  <div id="view-game" class="hidden w-full max-w-5xl mt-6">
-    <div class="bg-gray-800 p-4 rounded-lg mb-6 border border-amber-500/30">
-      <h3 class="font-bold text-amber-300 mb-3">จำลองการวางคำสั่ง (Playtest Tools):</h3>
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <button onclick="sendAction('petition')" class="p-3 bg-amber-600 hover:bg-amber-500 rounded font-bold text-sm">📜 ขอเลื่อนยศ (บารมี + กำลังรบ/2)</button>
-        <button onclick="sendAction('realmTax')" class="p-3 bg-blue-600 hover:bg-blue-500 rounded font-bold text-sm">💰 รีดภาษี (ได้เงิน แต่ความไม่สงบ +1)</button>
-        <button onclick="sendAction('assassinate')" class="p-3 bg-red-600 hover:bg-red-500 rounded font-bold text-sm">🗡️ ลอบสังหาร (จ่าย 2 เงิน)</button>
-      </div>
-    </div>
-    
-    <div id="game-board" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6"></div>
-    <div class="bg-gray-800 p-4 rounded-lg"><div id="action-logs" class="text-xs text-gray-300 space-y-1 max-h-40 overflow-y-auto"></div></div>
-  </div>
-
-  <script>
-    // ⚠️ เปลี่ยนเป็น URL ของ Render 
-    const socket = io('https://dynasty-online-game.onrender.com'); 
-    let currentCode = '';
-
-    function createRoom() { socket.emit('createRoom', document.getElementById('input-name').value); }
-    function joinRoom() { socket.emit('joinRoom', { code: document.getElementById('input-code').value.toUpperCase(), name: document.getElementById('input-name').value }); }
-    function addBot(archetype) { socket.emit('addBot', { code: currentCode, archetype }); }
-    function startGame() { socket.emit('startGame', currentCode); }
-    function sendAction(action) { socket.emit('playerAction', { code: currentCode, action }); }
-
-    socket.on('roomJoined', (data) => {
-      currentCode = data.code;
-      document.getElementById('view-home').classList.add('hidden');
-      document.getElementById('view-lobby').classList.remove('hidden');
-      document.getElementById('display-code').innerText = currentCode;
-    });
-
-    socket.on('updateRoom', (data) => {
-      const list = document.getElementById('player-list');
-      list.innerHTML = '';
-      if (data.players[0].id === socket.id) document.getElementById('host-controls').classList.remove('hidden');
-
-      data.players.forEach(p => {
-        list.innerHTML += `<li class="p-2 bg-gray-700 rounded flex justify-between"><span>${p.name}</span> <span class="text-xs">${p.type === 'bot' ? p.archetype : 'ผู้เล่น'}</span></li>`;
-      });
-
-      if (data.state === 'playing') {
-        document.getElementById('view-lobby').classList.add('hidden');
-        document.getElementById('view-game').classList.remove('hidden');
-        renderBoard(data.players);
-        document.getElementById('action-logs').innerHTML = data.logs.map(l => `<div>• ${l}</div>`).join('');
-      }
-    });
-
-    function renderBoard(players) {
-      const board = document.getElementById('game-board');
-      board.innerHTML = '';
-      players.forEach(p => {
-        board.innerHTML += `
-          <div class="p-4 bg-gray-800 rounded-lg border border-gray-700">
-            <h4 class="font-bold text-amber-300 mb-2">${p.name} <span class="text-xs bg-gray-700 px-1 rounded">ยศ ${p.stats.rank}</span></h4>
-            <div class="grid grid-cols-2 gap-2 text-xs">
-              <div class="bg-gray-700 p-2 text-yellow-400">💰 เงิน: ${p.stats.gold}</div>
-              <div class="bg-gray-700 p-2 text-red-400">🔥 ไม่สงบ: ${p.stats.unrest}/6</div>
-              <div class="bg-gray-700 p-2">✨ บารมี: ${p.stats.influence}</div>
-              <div class="bg-gray-700 p-2 text-purple-400">🗡️ เหลี่ยม: ${p.stats.intrigue}</div>
-              <div class="bg-gray-700 p-2 text-blue-400 col-span-2">⚔️ กำลังรบ: ${p.stats.might}</div>
-            </div>
-          </div>
-        `;
-      });
-    }
-  </script>
+function render() {
+  const app = document.getElementById('app');
+  if (!S) { app.innerHTML = home(); return; }
+  if (!S.started) { app.innerHTML = lobby(); return; }
+  const g = S.game, me = g.players.find(p => p.id === S.me);
+  const keep = formEra === g.era && me.placed === null && document.getElementById('orders');
+  if (keep) {
+    document.getElementById('cards').innerHTML = g.players.map(p => card(p, me)).join('');
+    document.getElementById('log').innerHTML = [...g.log].reverse().map(l => `<div>• ${esc(l)}</div>`).join('');
+    updateSide(g, me); return; }
+  app.innerHTML = game(g, me); updateSide(g, me);
+  if (me.placed === null && g.phase === 'orders') { formEra = g.era; buildForm(g, me); } else formEra = -1;
+}
+function home() {
+  return `<div class="max-w-md mx-auto mt-10 bg-gray-800 p-8 rounded-xl border border-amber-500/50 text-center">
+  <h1 class="text-4xl font-extrabold text-amber-500">DYNASTY</h1><p class="text-gray-400 text-sm mb-6">Playtest v0.8</p>
+  <input id="name" value="${esc(localStorage.name || '')}" placeholder="ชื่อตระกูล" class="w-full p-3 mb-4 rounded bg-gray-700 text-center outline-none">
+  ${btn('w-full bg-amber-600 hover:bg-amber-500 mb-4', 'สร้างห้องใหม่', 'create()')}
+  <div class="flex gap-2"><input id="code" maxlength="6" placeholder="รหัส 6 หลัก" class="flex-grow p-3 rounded bg-gray-700 text-center uppercase outline-none">${btn('bg-green-600 hover:bg-green-500', 'Join', 'join()')}</div>
+  <p class="text-red-400 text-sm mt-3">${esc(err)}</p></div>`;
+}
+function lobby() {
+  const host = S.host === S.me;
+  return `<div class="max-w-2xl mx-auto mt-10 bg-gray-800 p-6 rounded-xl">
+  <div class="text-center mb-4"><h2 class="text-xl font-bold text-amber-400">รหัสห้อง</h2><div class="text-5xl font-mono text-green-400 font-bold">${S.code}</div><p class="text-xs text-gray-400 mt-1">เล่น 3-6 คน (บอทนับเป็นผู้เล่น)</p></div>
+  <ul class="space-y-2 mb-4">${S.members.map(m => `<li class="p-2 bg-gray-700 rounded flex justify-between"><span>${esc(m.name)}</span><span class="text-xs">${m.bot ? m.style + (host ? ` <a class="text-red-400 cursor-pointer" onclick="rmBot('${m.pid}')">✕</a>` : '') : 'ผู้เล่น'}</span></li>`).join('')}</ul>
+  ${host ? `<div class="grid grid-cols-3 gap-2 mb-4">${STYLES.map(([k, l]) => btn('bg-indigo-900 hover:bg-indigo-700 text-xs', l, `addBot('${k}')`)).join('')}</div>${btn('w-full bg-amber-500 text-gray-900 hover:bg-amber-400', 'เริ่มเกม!', 'start()')}` : '<p class="text-center text-gray-400">รอเจ้าของห้องเริ่มเกม…</p>'}
+  <p class="text-red-400 text-sm mt-2">${esc(err)}</p></div>`;
+}
+function game(g, me) {
+  const over = g.phase === 'over';
+  return `<div class="flex justify-between items-center mb-3"><h1 class="text-amber-400 font-bold text-xl">DYNASTY · ยุค ${g.era}/7</h1><span class="text-xs text-gray-400">ตลาดภรรยา: ${g.market.map(w => w.name + '($' + w.price + ')').join(', ') || '—'}</span></div>
+  ${over ? `<div class="bg-amber-600 p-4 rounded mb-3 text-center text-xl font-bold">🏆 ผู้ชนะ: ${esc(g.winner)} ${btn('bg-gray-900 ml-4', 'ออก', 'leave()')}</div>` : ''}
+  <div id="side"></div>
+  <div id="cards" class="grid md:grid-cols-3 gap-3 mb-3">${g.players.map(p => card(p, me)).join('')}</div>
+  <div id="orders"></div>
+  <div class="bg-gray-800 p-3 rounded text-xs space-y-1 max-h-48 overflow-y-auto" id="log">${[...g.log].reverse().map(l => `<div>• ${esc(l)}</div>`).join('')}</div>`
+;
+}
+function card(p, me) {
+  const l = p.lead;
+  return `<div class="p-3 rounded-lg border ${p.id === me.id ? 'border-amber-500 bg-gray-800' : 'border-gray-700 bg-gray-800'}">
+  <div class="font-bold text-amber-300">${esc(p.name)} ${p.seal ? '🔰' : ''} <span class="text-xs bg-gray-700 px-1 rounded">ยศ ${RANK[p.rank - 1]}</span></div>
+  <div class="text-xs text-gray-300">${esc(l.name)} (วัย ${l.age})</div>
+  <div class="grid grid-cols-3 gap-1 text-xs mt-2">
+   <div class="bg-gray-700 p-1">✨ ${p.st.i}</div><div class="bg-gray-700 p-1">🕵️ ${p.st.n}</div><div class="bg-gray-700 p-1">⚔️ ${p.st.m}</div>
+   <div class="bg-gray-700 p-1 text-yellow-400">💰 ${p.money}</div><div class="bg-gray-700 p-1">👑 ${p.inf}</div><div class="bg-gray-700 p-1 text-red-400">🔥 ${p.unrest}/6</div></div>
+  <div class="text-xs mt-2 text-gray-400">ภรรยา: ${p.wife ? p.wife.name : '—'} · ทายาท: ${p.id === me.id ? (p.heir ? p.heir.name : '—') : (p.heirKnown ? 'มี' : '—')}${p.heirK ? ' (ถูกกัก)' : ''}<br>
+  ความลับ ${p.secretCount} · โทเคนคว่ำ ${p.tokensPlaced}${p.id === me.id ? ` · ทหาร ${p.soldiers}` : ''}</div></div>`;
+}
+function updateSide(g, me) {
+  const el = document.getElementById('side'); if (!el) return;
+  let h = '';
+  if (g.phase === 'orders') {
+    if (me.court) h += `<div class="bg-purple-900/60 p-3 rounded mb-3"><b>การ์ดราชสำนัก: ${esc(me.court)}</b><div class="text-xs my-1">${COURT[me.court] || ''}</div>${btn('bg-purple-600', 'เลือก A', "court('A')")} ${btn('bg-gray-600', 'เลือก B', "court('B')")}</div>`;
+    if (me.secrets && me.secrets.length && !g.usedSec && !me.placed) h += `<div class="bg-gray-800 p-3 rounded mb-3"><b>การ์ดความลับ (ใช้ได้ 1 ใบ/ยุค)</b>` + me.secrets.map((s, i) => {
+      const t = g.players.find(p => p.id === s.about);
+      return `<div class="flex gap-2 items-center text-xs mt-1">ค่า ${s.v} เกี่ยวกับ ${t ? esc(t.name) : '?'}<select id="sm${i}" class="bg-gray-700 p-1"><option value="extort">รีดไถ</option><option value="expose">เปิดโปง</option><option value="hush">ปิดปาก</option></select><input type="hidden" id="st${i}" value="${s.about}">${btn('bg-red-700 text-xs', 'ใช้', `useSecret(${i})`)}</div>`;
+    }).join('') + '</div>';
+    h += `<div class="bg-gray-800 p-2 rounded mb-3 text-xs flex gap-4 items-center">ตั้งค่า: จ่ายเต๋าป้องกัน <select id="dp" onchange="sendOpts()" class="bg-gray-700"><option>0</option><option>1</option><option>2</option></select> ติดสินบนปลายยุค <select id="br" onchange="sendOpts()" class="bg-gray-700"><option>0</option><option>1</option><option>2</option></select></div>`;
+  }
+  if (g.phase === 'orders' && me.placed) h += `<div class="bg-gray-800 p-3 rounded mb-3 text-sm">วางคำสั่งแล้ว รอ: ${esc(S.waiting.join(', ') || '—')}</div>`;
+  if (g.phase === 'between') h += `<div class="bg-gray-800 p-3 rounded mb-3 text-sm">กำลังเริ่มยุคถัดไป…</div>`;
+  const d = document.getElementById('side'); if (d.dataset.h !== h) { d.innerHTML = h; d.dataset.h = h; }
+}
+function buildForm(g, me) {
+  const slots = SLOTS[me.rank - 1], o = document.getElementById('orders');
+  if (!slots) return;
+  o.innerHTML = `<div class="bg-gray-800 p-3 rounded mb-3"><b class="text-amber-300">วางคำสั่งลับ (${slots} ช่อง ห้ามซ้ำชนิด) · ลอบสังหารเสีย ${g.assCost} เงิน</b><div id="rows"></div>${btn('bg-amber-600 mt-2', 'ยืนยันคำสั่ง', 'sendOrders()')}</div>`;
+  const rows = document.getElementById('rows');
+  for (let i = 0; i < slots; i++) { const d = document.createElement('div'); d.id = 'r' + i; d.className = 'flex flex-wrap gap-2 items-center mt-2 text-xs'; rows.appendChild(d); fillRow(i, g, me, i === 0 ? 'petition' : 'guard'); }
+}
+function fillRow(i, g, me, type) {
+  const d = document.getElementById('r' + i), others = g.players;
+  const sel = (id, arr, v) => `<select id="${id}${i}" class="bg-gray-700 p-1">${arr.map(([k, l]) => `<option value="${k}" ${k == v ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
+  let h = `<select id="t${i}" onchange="fillRow(${i},S.game,S.game.players.find(p=>p.id===S.me),this.value)" class="bg-gray-700 p-1">${Object.entries(TYPES).map(([k, l]) => `<option value="${k}" ${k === type ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
+  if (NEEDT.includes(type)) h += sel('tg', others.filter(p => type === 'lobby' || p.id !== me.id).map(p => [p.id, p.name]));
+  if (OPTS[type]) h += `<select id="o${i}" onchange="fillRow(${i},S.game,S.game.players.find(p=>p.id===S.me),document.getElementById('t${i}').value)" class="bg-gray-700 p-1">${OPTS[type].map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select>`;
+  if (type === 'family') h += `<span id="fx${i}"></span>`;
+  if (NEEDPAY.includes(type)) h += `จ่ายเสริมเต๋า ` + sel('p', [[0, 0], [1, 1], [2, 2]], 0);
+  d.innerHTML = h;
+  if (type === 'family') { const o = document.getElementById('o' + i); o.onchange = () => famExtra(i, g); famExtra(i, g); }
+}
+function famExtra(i, g) {
+  const v = document.getElementById('o' + i).value, el = document.getElementById('fx' + i);
+  el.innerHTML = v === 'marry' ? `<select id="w${i}" class="bg-gray-700 p-1">${g.market.map((w, k) => `<option value="${k}">${w.name} $${w.price}</option>`).join('')}</select>` : v === 'train' ? `<select id="s${i}" class="bg-gray-700 p-1"><option value="i">บารมี</option><option value="n">เล่ห์เหลี่ยม</option><option value="m">กำลังรบ</option></select>` : '';
+}
+function sendOrders() {
+  const me = S.game.players.find(p => p.id === S.me), slots = SLOTS[me.rank - 1], out = [], $ = id => document.getElementById(id);
+  for (let i = 0; i < slots; i++) {
+    const type = $('t' + i).value;
+    out.push({ type, target: $('tg' + i) && $('tg' + i).value, opt: $('o' + i) && $('o' + i).value, pay: $('p' + i) ? +$('p' + i).value : 0, wife: $('w' + i) ? +$('w' + i).value : 0, stat: $('s' + i) && $('s' + i).value });
+  }
+  if (new Set(out.map(o => o.type)).size < out.length) return alert('คำสั่งซ้ำชนิดกันไม่ได้');
+  socket.emit('submit', { code, orders: out });
+}
+render();
+</script>
 </body>
 </html>
