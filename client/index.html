@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dynasty Online (v0.8)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+</head>
+<body class="bg-gray-900 text-white min-h-screen flex flex-col items-center justify-center p-4">
+
+  <div id="view-home" class="w-full max-w-md bg-gray-800 p-8 rounded-xl shadow-2xl border border-amber-500/50 text-center">
+    <h1 class="text-4xl font-extrabold text-amber-500 mb-2">DYNASTY</h1>
+    <p class="text-gray-400 text-sm mb-6">เกมไต่เต้าอำนาจและดราม่าตระกูล v0.8</p>
+
+    <input id="input-name" type="text" placeholder="ชื่อผู้เล่น / ตระกูล" class="w-full p-3 mb-4 rounded bg-gray-700 text-white text-center border border-gray-600 focus:border-amber-400 outline-none">
+
+    <button onclick="createRoom()" class="w-full py-3 bg-amber-600 hover:bg-amber-500 font-bold rounded mb-4">สร้างห้องใหม่</button>
+
+    <div class="flex items-center my-4">
+      <div class="flex-grow border-t border-gray-600"></div>
+      <span class="px-3 text-gray-500 text-sm">หรือเข้าร่วมห้อง</span>
+      <div class="flex-grow border-t border-gray-600"></div>
+    </div>
+
+    <div class="flex space-x-2">
+      <input id="input-code" type="text" placeholder="รหัส 6 หลัก" class="flex-grow p-3 rounded bg-gray-700 text-white text-center uppercase border border-gray-600 outline-none" maxlength="6">
+      <button onclick="joinRoom()" class="px-6 py-3 bg-green-600 hover:bg-green-500 font-bold rounded">Join</button>
+    </div>
+  </div>
+
+  <div id="view-lobby" class="hidden w-full max-w-2xl bg-gray-800 p-6 rounded-xl border border-amber-500/50">
+    <div class="text-center mb-6">
+      <h2 class="text-2xl font-bold text-amber-400">Lobby (รอผู้เล่น)</h2>
+      <p class="text-gray-400 text-sm">คัดลอก Room Code ด้านล่างนี้ส่งให้เพื่อน</p>
+      <div id="display-code" class="text-5xl font-mono text-green-400 font-bold mt-2 tracking-widest">------</div>
+    </div>
+
+    <div class="mb-6">
+      <h3 class="text-lg font-semibold border-b border-gray-700 pb-2 mb-3">ผู้เล่นในห้อง (<span id="player-count">0</span>/6)</h3>
+      <ul id="player-list" class="space-y-2"></ul>
+    </div>
+
+    <div id="host-controls" class="hidden border-t border-gray-700 pt-4">
+      <p class="text-sm text-gray-400 mb-2">เพิ่มบอท (AI):</p>
+      <div class="grid grid-cols-3 gap-2 mb-4">
+        <button onclick="addBot('Assassin')" class="p-2 bg-red-900/80 hover:bg-red-700 rounded text-sm text-white">🤖 สายนักฆ่า</button>
+        <button onclick="addBot('Climber')" class="p-2 bg-blue-900/80 hover:bg-blue-700 rounded text-sm text-white">🤖 สายไต่ยศ</button>
+        <button onclick="addBot('Turtle')" class="p-2 bg-green-900/80 hover:bg-green-700 rounded text-sm text-white">🤖 สายป้องกัน</button>
+      </div>
+      <button onclick="startGame()" class="w-full py-3 bg-amber-500 hover:bg-amber-400 text-gray-900 font-extrabold text-lg rounded">เริ่มเกม!</button>
+    </div>
+  </div>
+
+  <div id="view-game" class="hidden w-full max-w-5xl">
+    <div class="flex justify-between items-center mb-6 bg-gray-800 p-4 rounded-lg border border-amber-500/30">
+      <h2 class="text-xl font-bold text-amber-400">ยุคที่ 1 : เจรจาและวางคำสั่ง</h2>
+      <div class="text-sm bg-gray-700 px-3 py-1 rounded">รหัสห้อง: <span id="game-room-code" class="font-mono text-green-400"></span></div>
+    </div>
+
+    <div id="game-board" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+  </div>
+
+  <script>
+    const socket = io('ใส่_URL_ของ_RENDER_ที่นี่'); 
+    let currentCode = '';
+
+    function createRoom() {
+      const name = document.getElementById('input-name').value || 'ผู้นำนิรนาม';
+      socket.emit('createRoom', name);
+    }
+
+    function joinRoom() {
+      const name = document.getElementById('input-name').value || 'ผู้นำนิรนาม';
+      const code = document.getElementById('input-code').value.toUpperCase();
+      if (code) socket.emit('joinRoom', { code, name });
+    }
+
+    function addBot(archetype) {
+      socket.emit('addBot', { code: currentCode, archetype });
+    }
+
+    function startGame() {
+      socket.emit('startGame', currentCode);
+    }
+
+    socket.on('roomJoined', (data) => {
+      currentCode = data.code;
+      document.getElementById('view-home').classList.add('hidden');
+      document.getElementById('view-lobby').classList.remove('hidden');
+      document.getElementById('display-code').innerText = currentCode;
+    });
+
+    socket.on('updateRoom', (data) => {
+      document.getElementById('player-count').innerText = data.players.length;
+      const list = document.getElementById('player-list');
+      list.innerHTML = '';
+
+      const isHost = data.players[0].id === socket.id;
+      if (isHost) document.getElementById('host-controls').classList.remove('hidden');
+
+      data.players.forEach(p => {
+        const li = document.createElement('li');
+        li.className = 'p-3 bg-gray-700/50 rounded flex justify-between items-center';
+        li.innerHTML = `
+          <span>${p.name} ${p.isHost ? '👑' : ''} ${p.type === 'bot' ? '🤖' : ''}</span>
+          <span class="text-xs text-gray-400">${p.type === 'bot' ? 'บอท ' + p.archetype : 'ผู้เล่นจริง'}</span>
+        `;
+        list.appendChild(li);
+      });
+
+      if (data.state === 'playing') {
+        document.getElementById('view-lobby').classList.add('hidden');
+        document.getElementById('view-game').classList.remove('hidden');
+        document.getElementById('game-room-code').innerText = currentCode;
+        renderBoard(data.players);
+      }
+    });
+
+    function renderBoard(players) {
+      const board = document.getElementById('game-board');
+      board.innerHTML = '';
+      players.forEach(p => {
+        const card = document.createElement('div');
+        card.className = `p-4 bg-gray-800 rounded-lg border ${p.id === socket.id ? 'border-amber-400 ring-2 ring-amber-400/30' : 'border-gray-700'}`;
+        card.innerHTML = `
+          <div class="flex justify-between items-center mb-3">
+            <h4 class="font-bold text-amber-300">${p.name} ${p.id === socket.id ? '(คุณ)' : ''}</h4>
+            <span class="px-2 py-1 text-xs rounded bg-gray-700">🏆 ยศ ${p.stats.rank}</span>
+          </div>
+          <div class="grid grid-cols-2 gap-2 text-xs">
+            <div class="bg-gray-700 p-2 rounded text-yellow-400">💰 เงิน: ${p.stats.gold}</div>
+            <div class="bg-gray-700 p-2 rounded text-red-400">🔥 ไม่สงบ: ${p.stats.unrest}/6</div>
+            <div class="bg-gray-700 p-2 rounded">✨ บารมี: ${p.stats.influence}</div>
+            <div class="bg-gray-700 p-2 rounded text-purple-400">🗡️ เล่ห์เหลี่ยม: ${p.stats.intrigue}</div>
+            <div class="bg-gray-700 p-2 rounded text-blue-400 col-span-2">⚔️ กำลังรบ: ${p.stats.might}</div>
+          </div>
+        `;
+        board.appendChild(card);
+      });
+    }
+
+    socket.on('errorMsg', (msg) => alert(msg));
+  </script>
+</body>
+</html>
