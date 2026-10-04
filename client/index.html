@@ -12,17 +12,13 @@
   <div id="view-home" class="w-full max-w-md bg-gray-800 p-8 rounded-xl shadow-2xl border border-amber-500/50 text-center">
     <h1 class="text-4xl font-extrabold text-amber-500 mb-2">DYNASTY</h1>
     <p class="text-gray-400 text-sm mb-6">เกมไต่เต้าอำนาจและดราม่าตระกูล v0.8</p>
-
     <input id="input-name" type="text" placeholder="ชื่อผู้เล่น / ตระกูล" class="w-full p-3 mb-4 rounded bg-gray-700 text-white text-center border border-gray-600 focus:border-amber-400 outline-none">
-
     <button onclick="createRoom()" class="w-full py-3 bg-amber-600 hover:bg-amber-500 font-bold rounded mb-4">สร้างห้องใหม่</button>
-
     <div class="flex items-center my-4">
       <div class="flex-grow border-t border-gray-600"></div>
       <span class="px-3 text-gray-500 text-sm">หรือเข้าร่วมห้อง</span>
       <div class="flex-grow border-t border-gray-600"></div>
     </div>
-
     <div class="flex space-x-2">
       <input id="input-code" type="text" placeholder="รหัส 6 หลัก" class="flex-grow p-3 rounded bg-gray-700 text-white text-center uppercase border border-gray-600 outline-none" maxlength="6">
       <button onclick="joinRoom()" class="px-6 py-3 bg-green-600 hover:bg-green-500 font-bold rounded">Join</button>
@@ -35,12 +31,10 @@
       <p class="text-gray-400 text-sm">คัดลอก Room Code ด้านล่างนี้ส่งให้เพื่อน</p>
       <div id="display-code" class="text-5xl font-mono text-green-400 font-bold mt-2 tracking-widest">------</div>
     </div>
-
     <div class="mb-6">
       <h3 class="text-lg font-semibold border-b border-gray-700 pb-2 mb-3">ผู้เล่นในห้อง (<span id="player-count">0</span>/6)</h3>
       <ul id="player-list" class="space-y-2"></ul>
     </div>
-
     <div id="host-controls" class="hidden border-t border-gray-700 pt-4">
       <p class="text-sm text-gray-400 mb-2">เพิ่มบอท (AI):</p>
       <div class="grid grid-cols-3 gap-2 mb-4">
@@ -58,11 +52,28 @@
       <div class="text-sm bg-gray-700 px-3 py-1 rounded">รหัสห้อง: <span id="game-room-code" class="font-mono text-green-400"></span></div>
     </div>
 
-    <div id="game-board" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+    <!-- แผงปุ่มกดทำแอ็กชัน -->
+    <div class="bg-gray-800 p-4 rounded-lg border border-amber-500/30 mb-6">
+      <h3 class="font-bold text-amber-300 mb-3">คำสั่งการเล่นของคุณ:</h3>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <button onclick="sendAction('rollDice')" class="p-3 bg-amber-600 hover:bg-amber-500 rounded font-bold shadow text-sm">🎲 ทอยเต๋าขอฎีกา (4+ สำเร็จ +2 Gold)</button>
+        <button onclick="sendAction('promoteRank')" class="p-3 bg-purple-600 hover:bg-purple-500 rounded font-bold shadow text-sm">🏆 จ่าย 3 Gold ไต่ยศขึ้นไป</button>
+        <button onclick="sendAction('recruitMight')" class="p-3 bg-blue-600 hover:bg-blue-500 rounded font-bold shadow text-sm">⚔️ จ่าย 2 Gold เกณฑ์ทหาร (+1 Might)</button>
+      </div>
+    </div>
+
+    <div id="game-board" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6"></div>
+
+    <!-- บันทึกเหตุการณ์ (Action Log) -->
+    <div class="bg-gray-800 p-4 rounded-lg border border-gray-700">
+      <h4 class="text-xs font-bold text-gray-400 mb-2">ประวัติการกระทำในห้อง:</h4>
+      <div id="action-logs" class="text-xs text-gray-300 space-y-1 max-h-32 overflow-y-auto"></div>
+    </div>
   </div>
 
   <script>
-    const socket = io('https://dynasty-online-game.onrender.com/'); 
+    // ⚠️ อย่าลืมใส่ URL ของ Render ของคุณตรงนี้ครับ
+    const socket = io('https://dynasty-online-game.onrender.com'); 
     let currentCode = '';
 
     function createRoom() {
@@ -82,6 +93,10 @@
 
     function startGame() {
       socket.emit('startGame', currentCode);
+    }
+
+    function sendAction(action) {
+      socket.emit('playerAction', { code: currentCode, action });
     }
 
     socket.on('roomJoined', (data) => {
@@ -114,6 +129,7 @@
         document.getElementById('view-game').classList.remove('hidden');
         document.getElementById('game-room-code').innerText = currentCode;
         renderBoard(data.players);
+        renderLogs(data.logs || []);
       }
     });
 
@@ -138,6 +154,11 @@
         `;
         board.appendChild(card);
       });
+    }
+
+    function renderLogs(logs) {
+      const logContainer = document.getElementById('action-logs');
+      logContainer.innerHTML = logs.map(l => `<div>• ${l}</div>`).join('');
     }
 
     socket.on('errorMsg', (msg) => alert(msg));
