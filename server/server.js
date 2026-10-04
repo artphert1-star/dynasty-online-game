@@ -28,7 +28,7 @@ function broadcast(room) {
       members: room.members.map(x => ({ pid: x.pid, name: x.name, bot: x.bot, style: x.style })),
       game: gameView(room, m.pid),
       replay: room.replay ? { cur: room.replay.cur && { ...room.replay.cur, faces: room.replay.cur.revealed ? room.replay.cur.faces : null, s: room.replay.cur.revealed ? room.replay.cur.s : null }, n: room.replay.done + 1, total: room.replay.total } : null,
-      waiting: room.game ? room.game.players.filter(p => !p.placed).map(p => p.name) : [],
+      waiting: room.game ? room.game.players.filter(p => (room.game.phase === 'window' ? !p.ready : !p.placed)).map(p => p.name) : [],
     });
   }
 }
@@ -36,12 +36,22 @@ function nextEra(room) {
   const g = room.game;
   if (!g || g.winner) return broadcast(room);
   g.startEra();
-  tryResolve(room);
   broadcast(room);
+  afterSubmit(room);
 }
-function tryResolve(room) {
+// ทุกคนวางคำสั่งครบ -> เปิดคำสั่ง + หน้าต่างความลับ (ข้อ 7) -> เมื่อทุกคนพร้อมจึงแก้ผล
+function afterSubmit(room) {
   const g = room.game;
-  if (!g || g.phase !== 'orders' || !g.allIn() || room.replay) return;
+  if (!g || g.phase !== 'orders' || !g.allIn() || room.replay || room.win) return;
+  g.openWindow();
+  room.win = setTimeout(() => closeWindow(room), 60000);
+  broadcast(room); checkWindow(room);
+}
+function checkWindow(room) { const g = room.game; if (g && g.phase === 'window' && room.win && g.allReady()) closeWindow(room); }
+function closeWindow(room) { if (!room.win) return; clearTimeout(room.win); room.win = null; startReplay(room); }
+function startReplay(room) {
+  const g = room.game;
+  if (!g || g.phase !== 'window' || room.replay) return;
   const before = {}; for (const m of room.members) before[m.pid] = g.view(m.pid).players;
   g.resolve();   // คำนวณทั้งยุคที่ server (สุ่มเต๋าที่นี่) แล้วเล่นซ้ำให้ผู้เล่นกดทอยทีละคน
   room.replay = { ev: g.ev, i: 0, done: 0, total: g.ev.filter(e => e.t === 'roll').length, shown: [], before, cur: null, timer: null };
@@ -123,7 +133,7 @@ io.on('connection', socket => {
   socket.on('rematch', code => {
     const { room, pid, g } = find(code, socket);
     if (!g || g.phase !== 'over' || pid !== room.members[0].pid) return;
-    room.game = null; broadcast(room);
+    room.game = null; room.replay = null; if (room.win) { clearTimeout(room.win); room.win = null; } broadcast(room);
   });
   socket.on('rollDice', code => {
     const { room, pid } = find(code, socket);
@@ -132,16 +142,20 @@ io.on('connection', socket => {
   socket.on('submit', ({ code, orders }) => {
     const { room, pid, g } = find(code, socket); if (!g || g.phase !== 'orders') return;
     g.submit(pid, Array.isArray(orders) ? orders : []);
-    broadcast(room); tryResolve(room);
+    broadcast(room); afterSubmit(room);
   });
   socket.on('court', ({ code, choice }) => { const { room, pid, g } = find(code, socket); if (g && g.phase === 'orders') { g.court(pid, choice === 'A' ? 'A' : 'B'); broadcast(room); } });
-  socket.on('secret', ({ code, idx, mode, target }) => {
+  socket.on('secret', ({ code, idx, mode, tok }) => {
     const { room, pid, g } = find(code, socket);
-    if (g && g.phase === 'orders' && !g.P(pid).placed && g.useSecret(pid, idx, mode, target)) broadcast(room);
+    if (g && g.useSecret(pid, idx | 0, mode, tok == null ? -1 : +tok)) { broadcast(room); checkWindow(room); }
   });
-  socket.on('opts', ({ code, defPay, bribe }) => {
+  socket.on('ready', code => { const { room, pid, g } = find(code, socket); if (g && g.phase === 'window') { g.setReady(pid); broadcast(room); checkWindow(room); } });
+  socket.on('ransom', code => { const { room, pid, g } = find(code, socket); if (g && !room.replay && g.phase !== 'resolve' && g.ransom(pid)) broadcast(room); });
+  socket.on('release', code => { const { room, pid, g } = find(code, socket); if (g && !room.replay && g.phase !== 'resolve' && g.release(pid)) broadcast(room); });
+  socket.on('feast', code => { const { room, pid, g } = find(code, socket); if (g && g.feast(pid)) broadcast(room); });
+  socket.on('opts', ({ code, defPay, bribe, rejectChild }) => {
     const { room, pid, g } = find(code, socket); if (!g) return;
-    const p = g.P(pid); p.defPay = Math.max(0, Math.min(2, defPay | 0)); p.bribe = Math.max(0, Math.min(2, bribe | 0));
+    const p = g.P(pid); p.defPay = Math.max(0, Math.min(2, defPay | 0)); p.bribe = Math.max(0, Math.min(2, bribe | 0)); p.rejectChild = !!rejectChild;
   });
 });
 

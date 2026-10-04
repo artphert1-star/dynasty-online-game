@@ -20,6 +20,7 @@ const PREF = {
   turtle: ['guard', 'petition', 'family', 'realm', 'intrigue'],
 };
 const stat = (p, k) => { const l = p.lead; return Math.min(6, Math.min(5, l.b[k] + l.t[k]) + (p.wife && p.wife.s === k ? p.wife.v : 0)); };
+const hb = (p, k) => (p.heir && p.heir.b[k] + p.heir.t[k] >= 3 ? 1 : 0); // v0.12 ข้อ 9ข: ทายาทค่า>=3 ให้เต๋า +1
 const regent = () => ({ name: 'Regent', age: 0, b: { i: 2, n: 2, m: 2 }, t: { i: 0, n: 0, m: 0 } });
 
 // court cards: A/B choices
@@ -29,19 +30,19 @@ const COURT = [
   { name: 'เรื่องอื้อฉาว', A: p => p.money >= 2 && (p.money -= 2, true), B: (p, g) => { const q = g.left(p); if (q) g.giveSecret(q, 1, p.id); } },
   { name: 'ทายาทดื้อรั้น', A: (p, g) => p.heir && (p.heir.t.i < 5 - p.heir.b.i ? p.heir.t.i++ : p.heir.t.m++, g.addU(p, 1), true), B: () => true },
   { name: 'พ่อค้าเสนอส่วย', A: (p, g) => (p.money += 3, g.addU(p, 1), true), B: p => { p.inf++; } },
-  { name: 'ผู้อาวุโสขอคำปรึกษา', A: p => { if (roll(stat(p, 'i')) >= 1) p.inf++; else p.money = Math.max(0, p.money - 1); return true; }, B: () => true },
+  { name: 'ผู้อาวุโสขอคำปรึกษา', A: p => { if (roll(stat(p, 'i') + hb(p, 'i')) >= 1) p.inf++; else p.money = Math.max(0, p.money - 1); return true; }, B: () => true },
 ];
 const EVENTS = ['drought', 'border', 'feast', 'plague'];
 
 class Game {
   constructor(players, seed) {
-    this.n = players.length; this.era = 0; this.hist = []; this.ev = []; this.rec = false; this.eventName = null; this.log = []; this.winner = null; this.phase = 'setup';
+    this.n = players.length; this.era = 0; this.hist = []; this.ev = []; this.rec = false; this.eventName = null; this.flags = {}; this.eventDeck = shuffle(EVENTS.flatMap(e => [e, e, e])); this.log = []; this.winner = null; this.phase = 'setup';
     const ls = shuffle(LEADERS.map(mk));
     this.heirDeck = shuffle(HEIRS.map(mk)); this.wifeDeck = shuffle(WIVES.map(w => ({ ...w })));
     this.courtDeck = []; this.courtDisc = [];
     this.market = []; this.sealIdx = 0;
     this.players = players.map((pl, i) => ({
-      id: pl.id, name: pl.name, bot: !!pl.bot, style: pl.style || STYLES[R(6)], lead: ls[i], heir: null, spare: null, heirK: 0,
+      id: pl.id, name: pl.name, bot: !!pl.bot, style: pl.style || STYLES[R(6)], lead: ls[i], heir: null, spare: null, capt: null, captive: null, ready: true, rejectChild: false,
       wife: null, rank: 1, money: 3, inf: 0, unrest: 1, soldiers: 0, secrets: [], placed: null, deadEra: -1,
       bonus: 0, lobby: 0, guard: false, usedSec: -1, bribe: 0, defPay: 0, courtCard: null, courtDone: true,
     }));
@@ -58,30 +59,52 @@ class Game {
   }
   refill() { while (this.market.length < 3 && this.wifeDeck.length) this.market.push(this.wifeDeck.pop()); }
   drawHeir() { if (!this.heirDeck.length) this.heirDeck = shuffle(HEIRS.map(mk)); return this.heirDeck.pop(); }
-  giveSecret(p, v, about) { if (p.secrets.length < 3) p.secrets.push({ v, about }); }
+  giveSecret(p, v, about) { if (p.secrets.filter(c => !c.child).length < 3) p.secrets.push({ v, about }); }
   seatsFull(rank) { const cap = rank === 3 ? this.n - 1 : rank === 4 ? 2 : rank === 5 ? 1 : 99; return this.players.filter(p => p.rank === rank).length >= cap; }
   addU(p, k) { p.unrest += k; if (p.unrest >= 6) this.rebel(p); }
 
   rebel(p) {
     const use = Math.min(2, p.soldiers); p.soldiers -= use;
-    const a = this.rl(p, stat(p, 'm') + use, 'ปราบกบฏ (กำลังรบ + ทหารที่ใช้)'), b = this.rl(p, p.unrest, 'ฝ่ายกบฏ (เต๋า = ความไม่สงบ)');
+    const a = this.rl(p, stat(p, 'm') + hb(p, 'm') + use, 'ปราบกบฏ (กำลังรบ + ทหารที่ใช้)'), b = this.rl(p, p.unrest, 'ฝ่ายกบฏ (เต๋า = ความไม่สงบ)');
     if (a >= b) { p.unrest = 1; p.inf++; this.say(`${p.name} ปราบกบฏสำเร็จ`); }
     else { p.rank = Math.max(1, p.rank - 1); p.money = Math.max(0, p.money - 3); p.inf = Math.max(0, p.inf - 1); p.unrest = 2; this.say(`${p.name} แพ้กบฏ ยศลด`); }
   }
+  returnHeir(o, c) {
+    const h = c.captive.heir; o.capt = null; c.captive = null;
+    if (!o.heir) o.heir = h; else if (!o.spare) o.spare = h;
+  }
+  ransom(id) { // ข้อ 8.4: จ่ายเงิน ส่วนขาดใช้บารมีแทนได้ไม่เกิน 2
+    const o = this.P(id); if (!o || !o.capt) return false;
+    const c = this.P(o.capt.by), price = o.capt.ransom, pay = Math.min(o.money, price), short = price - pay;
+    if (short > 2 || short > o.inf) return false;
+    o.money -= pay; c.money += pay; o.inf -= short; this.say(`${o.name} ไถ่ทายาทคืนจาก ${c.name} (${price})`); this.returnHeir(o, c); return true;
+  }
+  release(id) { const c = this.P(id); if (!c || !c.captive) return false; const o = this.P(c.captive.owner); this.say(`${c.name} ปล่อยตัวทายาทของ ${o.name}`); this.returnHeir(o, c); return true; }
+  feast(id) { const p = this.P(id); if (!p || !this.flags.feast || this.phase !== 'orders' || p.money < 2) return false; p.money -= 2; p.inf++; return true; }
   die(p, cause) {
     p.deadEra = this.era; p.wife = null;
-    if (p.heir && !p.heirK) { p.lead = p.heir; p.heir = p.spare; p.spare = null; p.unrest += 1; this.say(`${p.name}: ทายาทขึ้นครองบัลลังก์`); }
+    if (p.capt && p.money >= p.capt.ransom) this.ransom(p.id); // ไถ่ทายาทก่อนผลัดบัลลังก์ (อัตโนมัติถ้าเงินพอ)
+    let child = null, holder = null;
+    for (const h of this.players) { const k = h.secrets.findIndex(c => c.child && c.about === p.id); if (k >= 0) { holder = h; child = h.secrets.splice(k, 1)[0].child; break; } }
+    if (child && p.money >= 3 && (p.bot ? p.money >= 4 : p.rejectChild)) { p.money -= 3; child = null; this.say(`${p.name} ปฏิเสธลูกลับ (จ่าย 3)`); }
+    if (p.heir) {
+      const ci = child ? Math.min(5, child.b.i + child.t.i) : 0, hi = Math.min(5, p.heir.b.i + p.heir.t.i);
+      if (child && this.rl(holder, ci, 'ลูกลับชิงบัลลังก์ (บารมี)') > this.rl(p, hi, 'ทายาทเดิมป้องกัน (บารมี)')) {
+        p.lead = child; p.heir = p.spare; p.spare = null; holder.inf += 2; this.say(`ลูกลับของ ${holder.name} ชิงบัลลังก์ ${p.name} สำเร็จ`);
+      } else { p.lead = p.heir; p.heir = p.spare; p.spare = null; this.say(`${p.name}: ทายาทขึ้นครองบัลลังก์`); }
+      p.unrest += 1;
+    } else if (child) { p.lead = child; p.unrest += 1; holder.inf += 2; this.say(`ลูกลับของ ${holder.name} เป็นผู้สำเร็จราชการให้ ${p.name} (ไม่เสียยศ)`); }
     else {
-      const had = false; p.lead = regent(); p.heir = p.spare; p.spare = null; p.heirK = 0; p.unrest += 3;
+      p.lead = regent(); p.heir = p.spare; p.spare = null; p.unrest += 3;
       if (cause !== 'kill') p.rank = Math.max(1, p.rank - 1);
       this.say(`${p.name}: ผู้สำเร็จราชการขึ้นครอง`);
     }
-    if (p.unrest >= 6) this.rebel(p); else this.rebel(p); // succession always triggers a loyalty check
+    this.rebel(p); // เช็กแข็งข้อครั้งเดียวต่อการผลัดบัลลังก์
   }
   contest(a, t, stKey, pay) {
     const pa = Math.min(2, pay | 0, a.money); a.money -= pa;
     const pd = t.bot ? Math.min(2, Math.max(0, t.money - 3)) : Math.min(2, t.defPay | 0, t.money); t.money -= pd;
-    const L = this.lab || 'โจมตี', s = this.rl(a, stat(a, stKey) + pa, L + ': ฝ่ายโจมตี (เล่ห์เหลี่ยม+เงินเสริม)'), d = this.rl(t, stat(t, 'm') + (t.guard ? 2 : 0) + pd, L + ': ฝ่ายป้องกัน (กำลังรบ' + (t.guard ? '+ยาม' : '') + '+เงินเสริม)');
+    const L = this.lab || 'โจมตี', s = this.rl(a, stat(a, stKey) + hb(a, stKey) + pa, L + ': ฝ่ายโจมตี (เล่ห์เหลี่ยม+เงินเสริม)'), d = this.rl(t, stat(t, 'm') + hb(t, 'm') + (t.guard ? 2 : 0) + pd, L + ': ฝ่ายป้องกัน (กำลังรบ' + (t.guard ? '+ยาม' : '') + '+เงินเสริม)');
     return { s, d, win: s > d };
   }
 
@@ -89,16 +112,16 @@ class Game {
   startEra() {
     if (this.winner) return;
     this.era++; this.phase = 'orders'; this.flags = {};
-    const ev = EVENTS[R(4)]; this.flags[ev] = true; this.eventName = ev; this.say(`เหตุการณ์: ${ev}`);
-    if (ev === 'border') this.players.forEach(p => { if (roll(stat(p, 'm')) < 2) this.addU(p, 1); });
+    if (!this.eventDeck.length) this.eventDeck = shuffle(EVENTS.flatMap(e => [e, e, e]));
+    const ev = this.eventDeck.pop(); this.flags[ev] = true; this.eventName = ev; this.say(`เหตุการณ์: ${ev}`);
+    if (ev === 'border') this.players.forEach(p => { if (roll(stat(p, 'm') + hb(p, 'm')) < 2) this.addU(p, 1); });
     for (const p of this.players) {
-      p.money += SAL[p.rank - 1]; p.placed = null; p.guard = false; p.lobby = 0; p.bonus = 0; p.bribe = 0;
+      p.money += SAL[p.rank - 1]; p.placed = null; p.guard = false; p.lobby = 0; p.bonus = 0; p.bribe = 0; p.ready = false;
       if (!this.courtDeck.length) { this.courtDeck = shuffle(this.courtDisc.splice(0).concat(COURT.map((c, i) => i))); }
       p.courtCard = this.courtDeck.pop(); p.courtDone = false;
-      if (p.heirK > 0 && --p.heirK === 0) this.say(`ทายาทของ ${p.name} ถูกปล่อยตัว`);
     }
     this.refill();
-    for (const p of this.players) if (p.bot) { this.botCourt(p); this.botSecrets(p); this.submit(p.id, this.botPlan(p)); }
+    for (const p of this.players) if (p.bot) { this.botCourt(p); if (p.capt && p.money >= p.capt.ransom + 2) this.ransom(p.id); this.submit(p.id, this.botPlan(p)); }
   }
   court(id, choice) {
     const p = this.P(id); if (!p || p.courtDone) return false;
@@ -116,14 +139,29 @@ class Game {
     p.placed = out; return true;
   }
   allIn() { return this.players.every(p => p.placed); }
-  useSecret(id, idx, mode, tid) {
-    const p = this.P(id), t = this.P(tid), c = p && p.secrets[idx];
-    if (!c || !t || p.usedSec === this.era) return false;
+  // ข้อ 7: หลังเปิดคำสั่งทุกโทเคน มี "หน้าต่างความลับ" ก่อนแก้ผล
+  openWindow() {
+    this.phase = 'window';
+    for (const p of this.players) p.ready = p.bot ? false : !p.secrets.length;
+    for (const p of this.players) if (p.bot) { this.botSecrets(p); p.ready = true; }
+  }
+  allReady() { return this.players.every(p => p.ready); }
+  setReady(id) { const p = this.P(id); if (p) p.ready = true; }
+  useSecret(id, idx, mode, tok) {
+    const p = this.P(id), c = p && p.secrets[idx];
+    if (this.phase !== 'window' || !c || p.usedSec === this.era) return false;
+    const t = this.P(c.about); if (!t || t === p) return false;
     p.usedSec = this.era; p.secrets.splice(idx, 1);
     if (mode === 'extort') { if (t.money >= c.v * 2) { t.money -= c.v * 2; p.money += c.v * 2; } else t.inf = Math.max(0, t.inf - c.v); }
     else if (mode === 'expose') { t.inf = Math.max(0, t.inf - c.v); this.addU(t, 1); p.inf++; }
-    else if (mode === 'hush' && t.placed && t.placed.length) t.placed.splice(R(t.placed.length), 1);
-    p.bonus++; this.say(`${p.name} ใช้การ์ดความลับ (${mode}) กับ ${t.name}`); return true;
+    else if (mode === 'hush') { if (t.placed && t.placed.length) t.placed.splice(tok >= 0 && tok < t.placed.length ? tok : R(t.placed.length), 1); }
+    else if (mode === 'force') { // ตีความ: บังคับได้ถ้าเป้าหมายยังไม่ได้วางวิ่งเต้น ใช้แทนตัวลวงหรือช่องที่เหลือ
+      if (t.placed && !t.placed.some(o => o.type === 'lobby')) {
+        const o = { type: 'lobby', target: p.id, opt: 'support', owner: t.id }, d = t.placed.findIndex(x => x.type === 'decoy');
+        if (d >= 0) t.placed[d] = o; else if (t.placed.length < SLOTS[t.rank - 1]) t.placed.push(o);
+      }
+    }
+    p.bonus++; p.ready = true; this.say(`${p.name} ใช้การ์ดความลับ (${mode}) กับ ${t.name}`); return true;
   }
 
   resolve() {
@@ -156,17 +194,29 @@ class Game {
         if (!t || t === p) break;
         if (o.opt === 'tryst') {
           if (!p.wife || !t.wife) break;
-          const r = this.contest(p, t, 'n', o.pay); if (r.s >= 2 && r.win) this.giveSecret(p, 3, t.id);
-          else if (r.s === 0) this.giveSecret(t, 1, p.id);
+          const r = this.contest(p, t, 'n', o.pay);
+          if (r.win && r.s >= 2) {
+            if (o.pick === 'child' && !p.secrets.some(c => c.child)) p.secrets.push({ v: 3, about: t.id, child: this.drawHeir() });
+            else this.giveSecret(p, 3, t.id);
+          } else if (r.s === 0) this.giveSecret(t, 1, p.id);
         } else {
           const r = this.contest(p, t, 'n', o.pay);
-          if (r.win) this.giveSecret(p, 1, t.id); else if (r.s === 0) this.giveSecret(t, 1, p.id);
+          if (r.win) {
+            const k = t.secrets.findIndex(c => c.about === p.id && !c.child);
+            if (o.pick === 'release' && t.captive && t.captive.owner === p.id) this.release(t.id);
+            else if (o.pick === 'destroy' && k >= 0) { t.secrets.splice(k, 1); this.say(`${p.name} ทำลายการ์ดความลับของ ${t.name}`); }
+            else this.giveSecret(p, 1, t.id);
+          } else if (r.s === 0) this.giveSecret(t, 1, p.id);
         } break;
       }
       case 'kidnap': {
-        if (!t || !t.heir || t.heirK) break;
+        if (!t || !t.heir || p.captive) break;
         const r = this.contest(p, t, 'n', o.pay);
-        if (r.win) { t.heirK = 3; this.addU(t, 1); this.say(`${p.name} ลักพาตัวทายาทของ ${t.name}`); }
+        if (r.win) {
+          const ransom = Math.max(1, Math.min(4, o.ransom | 0 || 2));
+          p.captive = { owner: t.id, heir: t.heir, ransom }; t.capt = { by: p.id, ransom }; t.heir = t.spare; t.spare = null;
+          this.addU(t, 1); this.say(`${p.name} ลักพาตัวทายาทของ ${t.name} ค่าไถ่ ${ransom}`);
+        }
         break;
       }
       case 'assassinate': {
@@ -178,7 +228,7 @@ class Game {
         const r = this.contest(p, t, 'n', o.pay);
         if (r.win) {
           this.say(`${p.name} ลอบสังหาร${heir ? 'ทายาท' : 'ผู้นำ'}ของ ${t.name} สำเร็จ`);
-          if (heir) t.heir = t.spare, t.spare = null; else { this.die(t, 'kill'); p.bonus++; }
+          if (heir) { t.heir = t.spare; t.spare = null; } else { this.die(t, 'kill'); p.bonus++; }
         } else if (r.s === 0) this.giveSecret(t, 2, p.id);
         break;
       }
@@ -200,7 +250,7 @@ class Game {
       const rivals = all.filter(x => x !== o && !done.has(x) && x.type === 'family' && x.opt !== 'breed' && x.opt !== 'train' && x.wife === o.wife && this.P(x.owner).deadEra !== this.era && !this.P(x.owner).wife);
       let me = o, losers = [];
       if (rivals.length) {
-        const rs = [o, ...rivals].map(x => ({ x, s: this.rl(this.P(x.owner), stat(this.P(x.owner), 'i'), 'แย่งภรรยา (บารมี)') })).sort((a, b) => b.s - a.s);
+        const rs = [o, ...rivals].map(x => ({ x, s: this.rl(this.P(x.owner), stat(this.P(x.owner), 'i') + hb(this.P(x.owner), 'i'), 'แย่งภรรยา (บารมี)') })).sort((a, b) => b.s - a.s);
         me = rs[0].x; losers = rs.slice(1).map(r => r.x);
         rs.forEach(r => done.add(r.x));
         for (const l of losers) { const q = this.P(l.owner), alt = this.market.findIndex((m, i) => m && i !== o.wife && m.price <= q.money); if (alt >= 0) this.takeWife(q, alt); }
@@ -214,19 +264,19 @@ class Game {
     if (w.fx === 'sol1') p.soldiers = Math.min(4, p.soldiers + 1);
     if (w.fx === 'sol2') p.soldiers = Math.min(4, p.soldiers + 2);
     if (w.fx === 'gold1') p.money++;
-    if (w.fx === 'up') { if (p.rank < 4 && !this.seatsFull(p.rank + 1)) { p.rank++; p.inf += 2; } else p.inf += 2; }
+    if (w.fx === 'up') { if (p.rank < 3 && !this.seatsFull(p.rank + 1)) p.rank++; p.inf += 2; } // v0.11: ขึ้นได้สูงสุดยศ III
     this.say(`${p.name} แต่งงานกับ ${w.name}`);
   }
   petition(p, o) {
     if (p.rank >= 5) return;
     const use = Math.min(2, p.soldiers), pay = Math.min(2, o.pay | 0, p.money);
     const full = this.seatsFull(p.rank + 1);
-    const dice = stat(p, 'i') + use + Math.floor(stat(p, 'm') / 2) + p.bonus + p.lobby + pay;
+    const dice = stat(p, 'i') + hb(p, 'i') + use + Math.floor(stat(p, 'm') / 2) + p.bonus + p.lobby + pay;
     p.soldiers -= use; p.money -= pay;
     const need = TH[p.rank - 1] + (full ? 1 : 0), got = this.rl(p, dice, `ขอเลื่อนยศ (ต้องได้ ${need})`);
     this.say(`${p.name} ขอเลื่อนยศ: ${got}/${need}`);
     if (got < need) return;
-    if (full && p.rank + 1 < 5) { const v = this.players.filter(x => x.rank === p.rank + 1).sort((a, b) => a.inf - b.inf)[0]; if (v) v.rank--; }
+    if (full && p.rank + 1 < 5) { let v = this.players.find(x => x.id === o.victim && x.rank === p.rank + 1 && x !== p); if (!v) v = this.players.filter(x => x.rank === p.rank + 1).sort((a, b) => a.inf - b.inf)[0]; if (v) v.rank--; }
     p.rank++; p.inf += 2;
     if (p.rank === 5) { this.winner = p; this.phase = 'over'; this.say(`${p.name} ขึ้นเป็นจักรพรรดิ!`); }
   }
@@ -236,25 +286,36 @@ class Game {
       if (p.bot && p.unrest >= 3) p.bribe = Math.min(2, Math.max(0, p.money - 1));
       const b = Math.min(2, p.bribe, p.money, p.unrest - 0); p.money -= b; p.unrest = Math.max(0, p.unrest - b);
     }
-    if (this.era >= 5) {
-      const lv = [1, 1, 2][Math.min(this.era - 5, 2)] + (this.flags.plague ? 1 : 0);
-      for (const p of this.players) { const f = R(6) + 1, thr = lv + p.lead.age, dead = f <= thr;
-        if (this.rec) this.ev.push({ t: 'roll', pid: p.id, name: p.name, label: `ทอยความชรา (ตายถ้าได้ ≤ ${thr})`, n: 1, faces: [f], s: dead ? 1 : 0, die: true });
-        if (dead) { this.say(`${p.name}: ผู้นำตายเพราะชรา`); this.die(p, 'age'); } }
+    const base = this.era >= 4 ? [1, 1, 1, 2][Math.min(this.era - 4, 3)] : 0, lv = base + (this.flags.plague ? 1 : 0);
+    if (lv > 0) for (const p of this.players) {
+      const f = R(6) + 1, thr = lv + p.lead.age, dead = f <= thr;
+      if (this.rec) this.ev.push({ t: 'roll', pid: p.id, name: p.name, label: `ทอยความชรา (ตายถ้าได้ ≤ ${thr})`, n: 1, faces: [f], s: dead ? 1 : 0, die: true });
+      if (dead) { this.say(`${p.name}: ผู้นำตายเพราะชรา`); this.die(p, 'age'); }
     }
     this.sealIdx = (this.sealIdx + 1) % this.n;
     if (this.era >= 7) {
-      this.winner = [...this.players].sort((a, b) => b.rank - a.rank || b.inf - a.inf || b.money - a.money)[0];
-      this.phase = 'over'; this.say(`จบ 7 ยุค ผู้ชนะ: ${this.winner.name}`);
+      this.finalScore(); this.phase = 'over';
     } else this.phase = 'between';
+  }
+
+  pubScore(p) { return [0, 1, 3, 5, 0][p.rank - 1] + Math.min(8, Math.floor(p.inf / 2)) + (p.heir ? 2 : 0) + Math.min(3, Math.floor(p.money / 5)) - (p.unrest >= 4 ? 1 : 0); }
+  finalScore() { // ข้อ 5ก: คะแนนราชวงศ์ (+ การ์ดความลับที่ยังถือแบบจับคู่ศูนย์รวม)
+    for (const p of this.players) { if (p.capt && p.money >= p.capt.ransom) this.ransom(p.id); p.sec = 0; }
+    for (const h of this.players) for (const c of h.secrets) {
+      if (c.child || c.about === h.id) continue;
+      const pts = c.v === 3 ? 2 : 1; h.sec += pts; this.P(c.about).sec -= pts;
+    }
+    for (const p of this.players) { p.total = this.pubScore(p) + p.sec; this.say(`คะแนนราชวงศ์ ${p.name}: ${p.total} (สถานะ ${this.pubScore(p)}, ความลับ ${p.sec >= 0 ? '+' : ''}${p.sec})`); }
+    this.winner = [...this.players].sort((a, b) => b.total - a.total || b.rank - a.rank || b.inf - a.inf || b.money - a.money)[0];
+    this.say(`จบ 7 ยุค ผู้ชนะ: ${this.winner.name}`);
   }
 
   // ---------- bots ----------
   botCourt(p) { const c = COURT[p.courtCard]; this.court(p.id, p.money >= 3 && R(2) ? 'A' : 'B'); }
   botSecrets(p) {
-    if (!p.secrets.length) return;
-    const c = p.secrets[0], t = this.P(c.about); if (!t || t === p) return;
-    this.useSecret(p.id, 0, t.money >= c.v * 2 ? 'extort' : 'expose', t.id);
+    const i = p.secrets.findIndex(c => c.about !== p.id); if (i < 0) return;
+    const c = p.secrets[i], t = this.P(c.about);
+    this.useSecret(p.id, i, t.money >= c.v * 2 ? 'extort' : 'expose');
   }
   botPlan(p) {
     const others = this.players.filter(q => q !== p), slots = SLOTS[p.rank - 1], out = [];
@@ -270,8 +331,15 @@ class Game {
         if (!p.heir) return { type: 'family', opt: 'breed' };
         return { type: 'family', opt: 'train', stat: 'i' };
       },
-      intrigue: () => { const t = others[R(others.length)]; return t && (p.wife && t.wife && R(2) ? { type: 'intrigue', target: t.id, opt: 'tryst', pay: payAmt } : { type: 'intrigue', target: t.id, opt: 'spy' }); },
-      kidnap: () => { const t = others.find(q => q.heir && !q.heirK); return t && { type: 'kidnap', target: t.id, pay: payAmt }; },
+      intrigue: () => {
+        let t, pick = 'secret';
+        if (p.capt) { t = this.P(p.capt.by); pick = 'release'; }
+        else { const h = others.find(q => q.secrets.some(c => c.about === p.id)); if (h && R(2)) { t = h; pick = 'destroy'; } else t = others[R(others.length)]; }
+        if (!t) return null;
+        if (pick === 'secret' && p.wife && t.wife && R(2)) return { type: 'intrigue', target: t.id, opt: 'tryst', pick: !p.secrets.some(c => c.child) && R(2) ? 'child' : 'secret', pay: payAmt };
+        return { type: 'intrigue', target: t.id, opt: 'spy', pick, pay: payAmt };
+      },
+      kidnap: () => { const t = !p.captive && others.find(q => q.heir); return t && { type: 'kidnap', target: t.id, ransom: 2 + R(2), pay: payAmt }; },
       assassinate: () => top && p.money >= cost + 1 && (top.rank >= p.rank) && { type: 'assassinate', target: top.id, opt: 'leader', pay: Math.max(0, Math.min(2, p.money - cost - 1)) },
     };
     for (const k of PREF[p.style]) { if (out.length >= slots) break; const o = can[k] && can[k](); if (o) out.push(o); }
@@ -283,9 +351,10 @@ class Game {
   // public view for one player (hides others' secrets and tokens)
   view(pid) {
     return {
-      era: this.era, phase: this.phase, hist: this.hist, event: this.eventName, assCost: this.n === 3 ? 3 : 2, usedSec: (this.P(pid) || {}).usedSec === this.era, winner: this.winner && this.winner.name, market: this.market, log: this.log.slice(-30),
+      era: this.era, phase: this.phase, feast: !!this.flags.feast, hist: this.hist,
+      orders: this.phase === 'window' || this.phase === 'resolve' ? this.players.map(p => ({ pid: p.id, list: (p.placed || []).map(o => ({ type: o.type, target: o.target, opt: o.opt, pick: o.pick, ransom: o.ransom })) })) : null, event: this.eventName, assCost: this.n === 3 ? 3 : 2, usedSec: (this.P(pid) || {}).usedSec === this.era, winner: this.winner && this.winner.name, market: this.market, log: this.log.slice(-30),
       players: this.players.map(p => ({
-        id: p.id, name: p.name, bot: p.bot, style: p.style, heirK: p.heirK, st: { i: stat(p, 'i'), n: stat(p, 'n'), m: stat(p, 'm') }, rank: p.rank, money: p.money, inf: p.inf, unrest: p.unrest, soldiers: p.id === pid ? p.soldiers : undefined,
+        id: p.id, name: p.name, bot: p.bot, style: p.style, capt: p.capt, holding: p.captive && { owner: p.captive.owner, ransom: p.captive.ransom }, ready: p.ready, score: this.pubScore(p), secretAbout: p.secrets.map(c => c.about), hb: { i: hb(p, 'i'), n: hb(p, 'n'), m: hb(p, 'm') }, st: { i: stat(p, 'i'), n: stat(p, 'n'), m: stat(p, 'm') }, rank: p.rank, money: p.money, inf: p.inf, unrest: p.unrest, soldiers: p.id === pid ? p.soldiers : undefined,
         lead: p.lead, heirKnown: !!p.heir, wife: p.wife, seal: this.players.indexOf(p) === this.sealIdx,
         tokensPlaced: p.placed ? p.placed.length : 0, secretCount: p.secrets.length,
         ...(p.id === pid ? { heir: p.heir, spare: p.spare, secrets: p.secrets, placed: p.placed, court: p.courtDone ? null : COURT[p.courtCard].name } : {}),
