@@ -13,6 +13,12 @@ const io = new Server(server, { cors: { origin: '*', methods: ['GET', 'POST'] } 
 const rooms = {};
 const code6 = () => Math.random().toString(36).substring(2, 8).toUpperCase();
 
+function gameView(room, pid) {
+  if (!room.game) return null;
+  const v = room.game.view(pid), r = room.replay;
+  if (r) { v.players = r.before[pid]; v.log = r.shown.slice(-40); v.winner = null; v.phase = 'resolve'; v.hist = v.hist.filter(h => h.era < v.era); }
+  return v;
+}
 function broadcast(room) {
   for (const m of room.members) {
     const sid = room.sockets[m.pid];
@@ -20,7 +26,8 @@ function broadcast(room) {
     io.to(sid).emit('state', {
       code: room.code, me: m.pid, host: room.members[0].pid, started: !!room.game,
       members: room.members.map(x => ({ pid: x.pid, name: x.name, bot: x.bot, style: x.style })),
-      game: room.game ? room.game.view(m.pid) : null,
+      game: gameView(room, m.pid),
+      replay: room.replay ? { cur: room.replay.cur && { ...room.replay.cur, faces: room.replay.cur.revealed ? room.replay.cur.faces : null, s: room.replay.cur.revealed ? room.replay.cur.s : null }, n: room.replay.done + 1, total: room.replay.total } : null,
       waiting: room.game ? room.game.players.filter(p => !p.placed).map(p => p.name) : [],
     });
   }
@@ -34,11 +41,35 @@ function nextEra(room) {
 }
 function tryResolve(room) {
   const g = room.game;
-  if (g && g.phase === 'orders' && g.allIn()) {
-    g.resolve();
-    broadcast(room);
-    if (!g.winner) setTimeout(() => { if (room.game === g) nextEra(room); }, 4000);
+  if (!g || g.phase !== 'orders' || !g.allIn() || room.replay) return;
+  const before = {}; for (const m of room.members) before[m.pid] = g.view(m.pid).players;
+  g.resolve();   // คำนวณทั้งยุคที่ server (สุ่มเต๋าที่นี่) แล้วเล่นซ้ำให้ผู้เล่นกดทอยทีละคน
+  room.replay = { ev: g.ev, i: 0, done: 0, total: g.ev.filter(e => e.t === 'roll').length, shown: [], before, cur: null, timer: null };
+  step(room);
+}
+function step(room) {
+  const r = room.replay; if (!r) return;
+  clearTimeout(r.timer); r.cur = null;
+  while (r.i < r.ev.length && r.ev[r.i].t === 'log') r.shown.push(r.ev[r.i++].text);
+  const g = room.game;
+  if (r.i >= r.ev.length) {
+    room.replay = null; broadcast(room);
+    if (!g.winner) setTimeout(() => { if (room.game === g && !room.replay) nextEra(room); }, 5000);
+    return;
   }
+  const e = r.ev[r.i]; r.cur = { pid: e.pid, name: e.name, label: e.label, n: e.n, faces: e.faces, s: e.s, die: !!e.die, revealed: false };
+  broadcast(room);
+  const who = room.members.find(m => m.pid === e.pid);
+  r.timer = setTimeout(() => doRoll(room), (who && who.bot) || e.n === 0 ? 1300 : 45000);
+}
+function doRoll(room) {
+  const r = room.replay; if (!r || !r.cur || r.cur.revealed) return;
+  clearTimeout(r.timer); r.cur.revealed = true; broadcast(room);
+  r.timer = setTimeout(() => {
+    const e = r.ev[r.i++]; r.done++;
+    r.shown.push(`🎲 ${e.name} — ${e.label}: [${e.faces.join(',')}] = ${e.s} สำเร็จ`);
+    step(room);
+  }, 2800);
 }
 const find = (code, socket) => {
   const room = rooms[code];
@@ -93,6 +124,10 @@ io.on('connection', socket => {
     const { room, pid, g } = find(code, socket);
     if (!g || g.phase !== 'over' || pid !== room.members[0].pid) return;
     room.game = null; broadcast(room);
+  });
+  socket.on('rollDice', code => {
+    const { room, pid } = find(code, socket);
+    if (room && room.replay && room.replay.cur && room.replay.cur.pid === pid) doRoll(room);
   });
   socket.on('submit', ({ code, orders }) => {
     const { room, pid, g } = find(code, socket); if (!g || g.phase !== 'orders') return;
