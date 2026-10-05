@@ -3,6 +3,7 @@
 const R = n => Math.floor(Math.random() * n);
 const roll = n => { let s = 0; for (let i = 0; i < Math.min(Math.max(n | 0, 0), 10); i++) if (R(6) >= 3) s++; return s; };
 const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = R(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const freshHeirs = () => shuffle(HEIRS.map(a => ({ ...mk(a), isHeir: true })));
 const mk = ([name, age, i, n, m]) => ({ name, age, b: { i, n, m }, t: { i: 0, n: 0, m: 0 } });
 const LEADERS = [['Corvin Aldane',0,4,2,2],['Sylvara Nox',0,2,4,2],['Brannoch Hale',0,2,2,4],['Isaren Voss',0,3,3,2],['Torvald Kerr',0,2,3,3],['Elmira Thane',1,5,2,2],['Mordan Skell',1,2,5,2],['Garrick Dunmoor',1,2,2,5]];
 const HEIRS = [['Aren',0,4,1,1],['Bessa',0,1,4,1],['Caldor',0,1,1,4],['Dessa',0,3,2,1],['Edric',0,3,1,2],['Fenna',0,2,3,1],['Gaius',0,1,3,2],['Helda',0,2,1,3],['Ivor',0,1,2,3],['Jessa',0,2,2,2],['Kael',0,2,2,2],['Lyra',0,2,2,2],['Marek',1,5,1,1],['Nessa',1,1,5,1],['Orin',1,1,1,5],['Pella',1,4,2,1],['Quill',1,4,1,2],['Roran',1,2,4,1],['Sera',1,1,4,2],['Tamsin',1,2,1,4],['Ulric',1,1,2,4],['Vessa',1,3,2,2],['Wren',1,2,3,2],['Yara',1,2,2,3]];
@@ -21,7 +22,7 @@ const PREF = {
 };
 const stat = (p, k) => { const l = p.lead; return Math.min(6, Math.min(5, l.b[k] + l.t[k]) + (p.wife && p.wife.s === k ? p.wife.v : 0)); };
 const hb = (p, k) => (p.heir && p.heir.b[k] + p.heir.t[k] >= 3 ? 1 : 0); // v0.12 ข้อ 9ข: ทายาทค่า>=3 ให้เต๋า +1
-const regent = () => ({ name: 'Regent', age: 0, b: { i: 2, n: 2, m: 2 }, t: { i: 0, n: 0, m: 0 } });
+const regent = () => ({ name: 'Regent', age: 1, regent: true, b: { i: 2, n: 2, m: 2 }, t: { i: 0, n: 0, m: 0 } });
 
 // court cards: A/B choices
 const COURT = [
@@ -38,7 +39,7 @@ class Game {
   constructor(players, seed) {
     this.n = players.length; this.era = 0; this.hist = []; this.ev = []; this.rec = false; this.eventName = null; this.flags = {}; this.eventDeck = shuffle(EVENTS.flatMap(e => [e, e, e])); this.log = []; this.winner = null; this.phase = 'setup';
     const ls = shuffle(LEADERS.map(mk));
-    this.heirDeck = shuffle(HEIRS.map(mk)); this.wifeDeck = shuffle(WIVES.map(w => ({ ...w })));
+    this.heirDeck = freshHeirs(); this.heirDisc = []; this.wifeDeck = shuffle(WIVES.map(w => ({ ...w })));
     this.courtDeck = []; this.courtDisc = [];
     this.market = []; this.sealIdx = 0;
     this.players = players.map((pl, i) => ({
@@ -58,7 +59,18 @@ class Game {
     return s;
   }
   refill() { while (this.market.length < 3 && this.wifeDeck.length) this.market.push(this.wifeDeck.pop()); }
-  drawHeir() { if (!this.heirDeck.length) this.heirDeck = shuffle(HEIRS.map(mk)); return this.heirDeck.pop(); }
+  discard(c) { if (c && c.isHeir) this.heirDisc.push({ ...c, t: { i: 0, n: 0, m: 0 } }); }
+  drawHeir() { // v0.13: กองหมดให้สับกองทิ้งกลับมา
+    if (!this.heirDeck.length) { this.heirDeck = shuffle(this.heirDisc.splice(0)); if (!this.heirDeck.length) this.heirDeck = freshHeirs(); }
+    return this.heirDeck.pop();
+  }
+  fixFamily(p) { // ทายาทสำรองเลื่อนขึ้น + ผู้สำเร็จราชการหมดวาระเมื่อมีทายาท (ข้อ 9ค)
+    if (!p.heir && p.spare && !p.capt) { p.heir = p.spare; p.spare = null; }
+    if (p.lead.regent && p.heir) {
+      this.say(`${p.name}: ผู้สำเร็จราชการหมดวาระ ทายาทขึ้นเป็นผู้นำ`);
+      this.discard(p.lead); p.lead = p.heir; p.heir = p.spare; p.spare = null;
+    }
+  }
   giveSecret(p, v, about) { if (p.secrets.filter(c => !c.child).length < 3) p.secrets.push({ v, about }); }
   seatsFull(rank) { const cap = rank === 3 ? this.n - 1 : rank === 4 ? 2 : rank === 5 ? 1 : 99; return this.players.filter(p => p.rank === rank).length >= cap; }
   addU(p, k) { p.unrest += k; if (p.unrest >= 6) this.rebel(p); }
@@ -70,8 +82,9 @@ class Game {
     else { p.rank = Math.max(1, p.rank - 1); p.money = Math.max(0, p.money - 3); p.inf = Math.max(0, p.inf - 1); p.unrest = 2; this.say(`${p.name} แพ้กบฏ ยศลด`); }
   }
   returnHeir(o, c) {
-    const h = c.captive.heir; o.capt = null; c.captive = null;
-    if (!o.heir) o.heir = h; else if (!o.spare) o.spare = h;
+    const h = c.captive.heir, asSpare = o.capt && o.capt.asSpare; o.capt = null; c.captive = null;
+    if (asSpare && !o.spare) o.spare = h; else if (!o.heir) o.heir = h; else if (!o.spare) o.spare = h; else this.discard(h);
+    this.fixFamily(o);
   }
   ransom(id) { // ข้อ 8.4: จ่ายเงิน ส่วนขาดใช้บารมีแทนได้ไม่เกิน 2
     const o = this.P(id); if (!o || !o.capt) return false;
@@ -84,6 +97,8 @@ class Game {
   die(p, cause) {
     p.deadEra = this.era; p.wife = null;
     if (p.capt && p.money >= p.capt.ransom) this.ransom(p.id); // ไถ่ทายาทก่อนผลัดบัลลังก์ (อัตโนมัติถ้าเงินพอ)
+    if (!p.heir && p.spare) { p.heir = p.spare; p.spare = null; if (p.capt) p.capt.asSpare = true; } // ตัวสำรองสืบต่อทันที ไม่ต้องมีผู้สำเร็จราชการ
+    this.discard(p.lead);
     let child = null, holder = null;
     for (const h of this.players) { const k = h.secrets.findIndex(c => c.child && c.about === p.id); if (k >= 0) { holder = h; child = h.secrets.splice(k, 1)[0].child; break; } }
     if (child && p.money >= 3 && (p.bot ? p.money >= 4 : p.rejectChild)) { p.money -= 3; child = null; this.say(`${p.name} ปฏิเสธลูกลับ (จ่าย 3)`); }
@@ -93,7 +108,7 @@ class Game {
         p.lead = child; p.heir = p.spare; p.spare = null; holder.inf += 2; this.say(`ลูกลับของ ${holder.name} ชิงบัลลังก์ ${p.name} สำเร็จ`);
       } else { p.lead = p.heir; p.heir = p.spare; p.spare = null; this.say(`${p.name}: ทายาทขึ้นครองบัลลังก์`); }
       p.unrest += 1;
-    } else if (child) { p.lead = child; p.unrest += 1; holder.inf += 2; this.say(`ลูกลับของ ${holder.name} เป็นผู้สำเร็จราชการให้ ${p.name} (ไม่เสียยศ)`); }
+    } else if (child) { p.lead = Object.assign({}, child, { regent: true }); p.unrest += 1; holder.inf += 2; this.say(`ลูกลับของ ${holder.name} เป็นผู้สำเร็จราชการให้ ${p.name} (ไม่เสียยศ)`); }
     else {
       p.lead = regent(); p.heir = p.spare; p.spare = null; p.unrest += 3;
       if (cause !== 'kill') p.rank = Math.max(1, p.rank - 1);
@@ -174,6 +189,7 @@ class Game {
       const p = this.P(o.owner); if (this.winner || done.has(o)) continue;
       if (p.deadEra === this.era) continue; // leader died before turn: orders cancelled
       this.exec(p, o, all, done);
+      for (const q of this.players) this.fixFamily(q);
     }
     if (!this.winner) this.endEra();
     this.hist.push({ era: this.era, p: this.players.map(p => ({ id: p.id, r: p.rank, i: p.inf, m: p.money, u: p.unrest })) });
@@ -182,6 +198,7 @@ class Game {
   }
   exec(p, o, all, done) {
     const t = o.target ? this.P(o.target) : null;
+    if (t && t.deadEra === this.era && (o.type === 'lobby' || o.type === 'intrigue' || (o.type === 'assassinate' && o.opt !== 'heir'))) return; // v0.13: ยกเลิกคำสั่งที่เล็งผู้นำที่ตายแล้ว
     this.lab = ({ intrigue: o.opt === 'tryst' ? 'แอบสมสู่' : 'สืบข่าว', kidnap: 'ลักพาตัว', assassinate: 'ลอบสังหาร' })[o.type];
     switch (o.type) {
       case 'guard': p.guard = true; break;
@@ -214,7 +231,7 @@ class Game {
         const r = this.contest(p, t, 'n', o.pay);
         if (r.win) {
           const ransom = Math.max(1, Math.min(4, o.ransom | 0 || 2));
-          p.captive = { owner: t.id, heir: t.heir, ransom }; t.capt = { by: p.id, ransom }; t.heir = t.spare; t.spare = null;
+          p.captive = { owner: t.id, heir: t.heir, ransom }; t.capt = { by: p.id, ransom }; t.heir = null;
           this.addU(t, 1); this.say(`${p.name} ลักพาตัวทายาทของ ${t.name} ค่าไถ่ ${ransom}`);
         }
         break;
@@ -228,7 +245,7 @@ class Game {
         const r = this.contest(p, t, 'n', o.pay);
         if (r.win) {
           this.say(`${p.name} ลอบสังหาร${heir ? 'ทายาท' : 'ผู้นำ'}ของ ${t.name} สำเร็จ`);
-          if (heir) { t.heir = t.spare; t.spare = null; } else { this.die(t, 'kill'); p.bonus++; }
+          if (heir) { this.discard(t.heir); t.heir = null; } else { this.die(t, 'kill'); p.bonus++; }
         } else if (r.s === 0) this.giveSecret(t, 2, p.id);
         break;
       }
@@ -237,11 +254,16 @@ class Game {
     }
   }
   family(p, o, all, done) {
-    if (o.opt === 'breed') {
+    if (o.opt === 'adopt') { // v0.13: จ่าย 4 จั่วทายาทสุ่ม ใช้ได้เมื่อไม่มีทายาท (ทายาทที่ถูกกักนับว่ามี)
+      if (p.heir || p.capt || p.money < 4) return;
+      p.money -= 4; p.heir = this.drawHeir(); this.say(`${p.name} รับบุตรบุญธรรม (${p.heir.name})`);
+    } else if (o.opt === 'breed') {
       if (!p.wife) return;
       const cs = Array.from({ length: p.wife.fert }, () => this.drawHeir()).sort((a, b) => b.b.i + b.b.n + b.b.m - (a.b.i + a.b.n + a.b.m));
-      if (!p.heir) p.heir = cs[0]; else if (!p.spare) p.spare = cs[0];
-      if (p.wife.fert === 3 && !p.spare && cs[1]) p.spare = cs[1];
+      const kept = [];
+      if (!p.heir && !p.capt) { p.heir = cs[0]; kept.push(cs[0]); } else if (!p.spare) { p.spare = cs[0]; kept.push(cs[0]); }
+      if (p.wife.fert === 3 && !p.spare && cs[1]) { p.spare = cs[1]; kept.push(cs[1]); }
+      cs.filter(c => !kept.includes(c)).forEach(c => this.discard(c));
     } else if (o.opt === 'train') {
       const h = p.heir; const k = o.stat || 'i'; if (h && h.b[k] + h.t[k] < 5) h.t[k]++;
     } else {
@@ -292,6 +314,7 @@ class Game {
       if (this.rec) this.ev.push({ t: 'roll', pid: p.id, name: p.name, label: `ทอยความชรา (ตายถ้าได้ ≤ ${thr})`, n: 1, faces: [f], s: dead ? 1 : 0, die: true });
       if (dead) { this.say(`${p.name}: ผู้นำตายเพราะชรา`); this.die(p, 'age'); }
     }
+    for (const p of this.players) this.fixFamily(p);
     this.sealIdx = (this.sealIdx + 1) % this.n;
     if (this.era >= 7) {
       this.finalScore(); this.phase = 'over';
@@ -327,6 +350,7 @@ class Game {
       lobby: () => top && top.rank >= 3 && { type: 'lobby', target: top.id, opt: 'oppose' },
       realm: () => (p.money < 3 || p.unrest <= 1) && p.unrest < 4 ? { type: 'realm', opt: 'tax' } : p.soldiers < 2 && p.money >= 3 ? { type: 'realm', opt: 'recruit' } : p.unrest < 4 && { type: 'realm', opt: 'tax' },
       family: () => {
+        if (p.lead.regent && !p.heir && !p.capt && p.money >= 5) return { type: 'family', opt: 'adopt' };
         if (!p.wife) { const i = this.market.findIndex(m => m && m.price <= p.money); return i >= 0 && { type: 'family', opt: 'marry', wife: i }; }
         if (!p.heir) return { type: 'family', opt: 'breed' };
         return { type: 'family', opt: 'train', stat: 'i' };
