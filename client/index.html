@@ -1,257 +1,530 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dynasty Online (rules v0.12)</title>
-<script src="https://cdn.tailwindcss.com"></script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d0a13">
+<title>Dynasty Online · กติกา v0.13</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 <style>
-.tip{position:relative;border-bottom:1px dotted #9ca3af;cursor:help}
-.tip:hover::after,.tip:focus::after{content:attr(data-t);position:absolute;left:0;top:100%;z-index:50;width:230px;background:#111827;border:1px solid #f59e0b;padding:6px 8px;border-radius:6px;font-size:11px;line-height:1.4;color:#f3f4f6;white-space:normal;font-weight:400;text-align:left}
-@keyframes tumble{from{transform:rotate(0) scale(.3);opacity:.2}to{transform:rotate(720deg) scale(1);opacity:1}}
-.die{width:42px;height:42px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;margin:3px}
-.roll{animation:tumble .9s ease-out}
+:root{--bg:#0d0a13;--s1:#171220;--s2:#211a2e;--s3:#2c2340;--line:#3a2f52;--gold:#e6b85c;--gold2:#a97f2e;--ivory:#f4ecd9;--mute:#a69cbb;--red:#d04a63;--green:#45bf92;--blue:#5aa9e6;--violet:#9a7ee8}
+*{box-sizing:border-box}
+html,body{background:var(--bg)}
+body{font-family:'Prompt',system-ui,sans-serif;color:var(--ivory);min-height:100vh;background:radial-gradient(1100px 560px at 50% -12%,#2c1d48 0%,transparent 62%),radial-gradient(800px 480px at 100% 100%,#1d1432 0%,transparent 55%),var(--bg);background-attachment:fixed}
+.display{font-family:'Cinzel','Prompt',serif;letter-spacing:.1em}
+.text-mute{color:var(--mute)} .text-gold{color:var(--gold)}
+.card{background:linear-gradient(180deg,var(--s2),var(--s1));border:1px solid var(--line);border-radius:16px;box-shadow:0 8px 28px rgba(0,0,0,.35)}
+.card-me{border-color:var(--gold2);box-shadow:0 0 0 1px rgba(230,184,92,.25),0 8px 28px rgba(0,0,0,.4),0 0 40px rgba(230,184,92,.07)}
+.card-hl{border-color:var(--gold);box-shadow:0 0 0 1px rgba(230,184,92,.5),0 0 36px rgba(230,184,92,.18)}
+.sec-title{font-weight:600;font-size:.8rem;letter-spacing:.06em;color:var(--gold);text-transform:uppercase;display:flex;align-items:center;gap:.4rem}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.4rem;padding:.55rem 1rem;border-radius:12px;font-weight:600;font-size:.875rem;border:1px solid var(--line);background:var(--s3);color:var(--ivory);cursor:pointer;transition:.15s;min-height:40px}
+.btn:hover{filter:brightness(1.15);transform:translateY(-1px)} .btn:active{transform:none}
+.btn:disabled,.btn.off{opacity:.4;cursor:not-allowed;transform:none;filter:none}
+.btn-gold{background:linear-gradient(180deg,#f0c872,#c8923a);color:#2a1b05;border-color:#f3d28d;box-shadow:0 4px 18px rgba(230,184,92,.28)}
+.btn-red{background:linear-gradient(180deg,#e0586f,#a93249);border-color:#ef8396}
+.btn-green{background:linear-gradient(180deg,#52cfa2,#2f9b76);border-color:#7fe0bd;color:#06231a}
+.btn-ghost{background:transparent}
+.btn-sm{padding:.3rem .65rem;font-size:.75rem;min-height:30px;border-radius:9px}
+.btn-lg{padding:.85rem 1.6rem;font-size:1.05rem;border-radius:14px}
+.badge{display:inline-flex;align-items:center;gap:.25rem;padding:.08rem .5rem;border-radius:999px;font-size:.68rem;font-weight:600;background:var(--s3);border:1px solid var(--line);color:var(--mute);white-space:nowrap}
+.badge.gold{color:#2a1b05;background:var(--gold);border-color:var(--gold)} .badge.warn{color:#ffd9a0;background:#4a2f12;border-color:#8a5a22} .badge.bad{color:#ffc3cd;background:#4a1626;border-color:#8a2a44} .badge.ok{color:#bff3df;background:#123a2c;border-color:#2a7a5c}
+.av{display:inline-flex;align-items:center;justify-content:center;border-radius:50%;font-weight:700;color:#150f1e;background:var(--c);box-shadow:0 0 0 2px var(--s1),0 0 0 4px var(--c);flex:none}
+.rk{display:inline-block;width:9px;height:9px;transform:rotate(45deg);background:var(--s3);border:1px solid var(--line);margin:0 3px} .rk.on{background:var(--gold2);border-color:var(--gold)} .rk.v.on{background:var(--gold);box-shadow:0 0 8px var(--gold)}
+.pips{display:flex;gap:2px} .pips i{width:100%;height:5px;border-radius:2px;background:var(--s3)} .pips i.on{background:var(--c,var(--gold))} .pips i.bonus{background:repeating-linear-gradient(45deg,var(--gold),var(--gold) 3px,#fff7 3px,#fff7 5px)}
+.stat{background:rgba(0,0,0,.22);border:1px solid var(--line);border-radius:12px;padding:.4rem .5rem}
+.stat .n{font-size:1.35rem;font-weight:700;line-height:1}
+.meter{display:grid;grid-template-columns:repeat(6,1fr);gap:3px} .meter i{height:8px;border-radius:2px;background:var(--s3)} .meter i.on{background:var(--green)} .meter i.on.m{background:#e3b341} .meter i.on.h{background:var(--red)}
+.meter.danger{animation:pulse 1.2s infinite}
+.seg{display:inline-flex;flex-wrap:wrap;gap:4px;background:rgba(0,0,0,.25);padding:3px;border-radius:12px;border:1px solid var(--line)}
+.seg button{padding:.3rem .65rem;border-radius:9px;font-size:.75rem;font-weight:600;color:var(--mute);border:0;background:transparent;cursor:pointer;min-height:30px}
+.seg button.on{background:var(--gold);color:#2a1b05} .seg button:disabled{opacity:.3;cursor:not-allowed} .seg button:not(.on):not(:disabled):hover{background:var(--s3);color:var(--ivory)}
+.otype{display:flex;flex-direction:column;align-items:center;gap:2px;padding:.45rem .3rem;border-radius:12px;background:rgba(0,0,0,.25);border:1px solid var(--line);cursor:pointer;font-size:.7rem;font-weight:600;color:var(--mute);transition:.15s;min-height:58px;text-align:center}
+.otype .ic{font-size:1.25rem;line-height:1} .otype:hover:not(:disabled){border-color:var(--gold2);color:var(--ivory)} .otype.on{background:linear-gradient(180deg,#3a2c14,#2a2010);border-color:var(--gold);color:var(--gold);box-shadow:0 0 14px rgba(230,184,92,.2)} .otype:disabled{opacity:.28;cursor:not-allowed}
+.tip{position:relative;border-bottom:1px dotted #8e84a6;cursor:help}
+.tip:hover::after,.tip:focus::after{content:attr(data-t);position:absolute;left:0;top:calc(100% + 6px);z-index:60;width:240px;background:#0b0810;border:1px solid var(--gold2);padding:7px 9px;border-radius:9px;font-size:11px;line-height:1.45;color:var(--ivory);white-space:normal;font-weight:400;text-align:left;box-shadow:0 8px 24px rgba(0,0,0,.6)}
+.step{flex:1 0 auto;min-width:92px;text-align:center;font-size:.68rem;padding:.35rem .2rem;color:var(--mute);border-bottom:2px solid var(--line);white-space:nowrap} .step.done{color:#8f86a6;border-color:var(--gold2)} .step.cur{color:var(--gold);border-color:var(--gold);font-weight:700}
+.eraDot{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:700;background:var(--s3);color:var(--mute);border:1px solid var(--line)} .eraDot.done{background:var(--gold2);color:#1b1206;border-color:var(--gold2)} .eraDot.cur{background:var(--gold);color:#1b1206;box-shadow:0 0 14px var(--gold)}
+.eraLine{height:2px;width:14px;background:var(--line)} .eraLine.done{background:var(--gold2)}
+.die{width:50px;height:50px;border-radius:11px;display:grid;grid-template:repeat(3,1fr)/repeat(3,1fr);padding:8px;gap:2px;margin:3px;box-shadow:inset 0 -3px 0 rgba(0,0,0,.25),0 4px 10px rgba(0,0,0,.4)}
+.die i{border-radius:50%} .die i.on{background:#fff;box-shadow:0 0 3px rgba(255,255,255,.7)}
+.die.win{background:linear-gradient(145deg,#3fbf91,#23805f)} .die.lose{background:linear-gradient(145deg,#8a2f44,#5c1c2d)} .die.neu{background:linear-gradient(145deg,#6a5f86,#45395f)} .die.blank{background:var(--s3);opacity:.7}
+.tumble{animation:tumble .85s cubic-bezier(.2,.8,.3,1)}
+@keyframes tumble{0%{transform:rotate(0) scale(.2);opacity:0}60%{transform:rotate(540deg) scale(1.15);opacity:1}100%{transform:rotate(720deg) scale(1)}}
+@keyframes pulse{50%{opacity:.55}} @keyframes glow{50%{box-shadow:0 0 28px rgba(230,184,92,.55)}}
+@keyframes fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.fade-in{animation:fadein .35s ease both} .glow{animation:glow 1.6s infinite} .pulse{animation:pulse 1.4s infinite}
+.logline{display:flex;gap:.5rem;font-size:.78rem;padding:.35rem .5rem;border-radius:8px;border-left:3px solid var(--line);background:rgba(0,0,0,.18)}
+.logline.roll{border-color:var(--blue)} .logline.bad{border-color:var(--red)} .logline.good{border-color:var(--green)} .logline.gold{border-color:var(--gold)}
+.modal{position:fixed;inset:0;background:rgba(5,3,10,.78);backdrop-filter:blur(4px);z-index:80;display:flex;align-items:flex-start;justify-content:center;padding:4vh 12px;overflow-y:auto}
+.toast.ok{background:#0f3226;border-color:var(--green);color:#c7f5e4}
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:90;background:#3a1220;border:1px solid var(--red);color:#ffd6dd;padding:.7rem 1.1rem;border-radius:12px;font-size:.88rem;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+.sticky-bar{position:sticky;bottom:0;z-index:30;background:linear-gradient(180deg,transparent,rgba(13,10,19,.95) 30%);padding:1.2rem 0 .6rem}
+.hero-title{font-size:clamp(2.6rem,9vw,4.6rem);font-weight:800;background:linear-gradient(180deg,#fff0c9,#e6b85c 55%,#a97f2e);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 4px 24px rgba(230,184,92,.25))}
+input.fld{width:100%;padding:.8rem 1rem;border-radius:12px;background:rgba(0,0,0,.35);border:1px solid var(--line);color:var(--ivory);outline:none;font-size:1rem} input.fld:focus{border-color:var(--gold)}
+::-webkit-scrollbar{width:8px;height:8px} ::-webkit-scrollbar-thumb{background:var(--s3);border-radius:8px}
+@media (max-width:640px){.die{width:42px;height:42px;padding:6px}}
+/* utilities (generated) */
+body,h1,h2,h3,p,ol,ul{margin:0}ol,ul{padding:0}button,input{font:inherit;color:inherit}button{border:0;background:none;cursor:pointer}svg{display:block}label{display:block}b{font-weight:700}
+.flex{display:flex}
+.flex-1{flex:1 1 0%}
+.flex-col{flex-direction:column}
+.flex-wrap{flex-wrap:wrap}
+.font-bold{font-weight:700}
+.font-normal{font-weight:400}
+.font-semibold{font-weight:600}
+.gap-1{gap:0.25rem}
+.gap-2{gap:0.5rem}
+.gap-3{gap:0.75rem}
+.gap-4{gap:1rem}
+.grid{display:grid}
+.grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.grid-cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.h-2{height:0.5rem}
+.h-px{height:1px}
+.items-baseline{align-items:baseline}
+.items-center{align-items:center}
+.items-end{align-items:flex-end}
+.items-start{align-items:flex-start}
+.justify-between{justify-content:space-between}
+.justify-center{justify-content:center}
+.leading-none{line-height:1}
+.leading-relaxed{line-height:1.625}
+@media (min-width:1024px){.lg\:col-span-2{grid-column:span 2 / span 2}}
+@media (min-width:1024px){.lg\:grid-cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (min-width:1024px){.lg\:sticky{position:sticky}}
+@media (min-width:1024px){.lg\:top-3{top:0.75rem}}
+.list-decimal{list-style:decimal}
+.max-h-\[340px\]{max-height:340px}
+.max-h-\[60vh\]{max-height:60vh}
+.max-w-2xl{max-width:42rem}
+.max-w-3xl{max-width:48rem}
+.max-w-7xl{max-width:80rem}
+.max-w-md{max-width:28rem}
+.mb-1{margin-bottom:0.25rem}
+.mb-2{margin-bottom:0.5rem}
+.mb-3{margin-bottom:0.75rem}
+.mb-4{margin-bottom:1rem}
+.mb-8{margin-bottom:2rem}
+@media (min-width:768px){.md\:col-span-2{grid-column:span 2 / span 2}}
+@media (min-width:768px){.md\:col-span-3{grid-column:span 3 / span 3}}
+@media (min-width:768px){.md\:grid-cols-5{grid-template-columns:repeat(5,minmax(0,1fr))}}
+.min-h-\[28px\]{min-height:28px}
+.min-h-\[56px\]{min-height:56px}
+.min-h-\[90vh\]{min-height:90vh}
+.min-w-0{min-width:0}
+.ml-2{margin-left:0.5rem}
+.mt-1{margin-top:0.25rem}
+.mt-2{margin-top:0.5rem}
+.mt-3{margin-top:0.75rem}
+.mt-4{margin-top:1rem}
+.mt-5{margin-top:1.25rem}
+.mt-6{margin-top:1.5rem}
+.mx-auto{margin-left:auto;margin-right:auto}
+.my-2{margin-top:0.5rem;margin-bottom:0.5rem}
+.my-4{margin-top:1rem;margin-bottom:1rem}
+.normal-case{text-transform:none}
+.overflow-x-auto{overflow-x:auto}
+.overflow-y-auto{overflow-y:auto}
+.p-2{padding:0.5rem}
+.p-3{padding:0.75rem}
+.p-4{padding:1rem}
+.p-5{padding:1.25rem}
+.p-6{padding:1.5rem}
+.pl-5{padding-left:1.25rem}
+.pr-1{padding-right:0.25rem}
+.py-2{padding-top:0.5rem;padding-bottom:0.5rem}
+.rounded{border-radius:.25rem}
+.rounded-2xl{border-radius:1rem}
+.rounded-xl{border-radius:.75rem}
+.self-center{align-self:center}
+.self-start{align-self:flex-start}
+@media (min-width:640px){.sm\:grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (min-width:640px){.sm\:grid-cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (min-width:640px){.sm\:grid-cols-5{grid-template-columns:repeat(5,minmax(0,1fr))}}
+@media (min-width:640px){.sm\:p-5{padding:1.25rem}}
+@media (min-width:640px){.sm\:text-6xl{font-size:3.75rem;line-height:1}}
+@media (min-width:640px){.sm\:text-sm{font-size:.875rem;line-height:1.25rem}}
+.text-2xl{font-size:1.5rem;line-height:2rem}
+.text-3xl{font-size:1.875rem;line-height:2.25rem}
+.text-5xl{font-size:3rem;line-height:1}
+.text-\[10px\]{font-size:10px}
+.text-\[11px\]{font-size:11px}
+.text-base{font-size:1rem;line-height:1.5rem}
+.text-center{text-align:center}
+.text-green-300{color:#86efac}
+.text-left{text-align:left}
+.text-lg{font-size:1.125rem;line-height:1.75rem}
+.text-red-300{color:#fca5a5}
+.text-right{text-align:right}
+.text-sm{font-size:.875rem;line-height:1.25rem}
+.text-xl{font-size:1.25rem;line-height:1.75rem}
+.text-xs{font-size:.75rem;line-height:1rem}
+.tracking-widest{letter-spacing:.1em}
+.truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.uppercase{text-transform:uppercase}
+.w-14{width:3.5rem}
+.w-5{width:1.25rem}
+.w-full{width:100%}
+.space-y-1>*+*{margin-top:0.25rem}
+.space-y-2>*+*{margin-top:0.5rem}
+.space-y-3>*+*{margin-top:0.75rem}
+.space-y-4>*+*{margin-top:1rem}
 </style>
 </head>
-<body class="bg-gray-900 text-white min-h-screen p-3">
-<div id="app" class="max-w-6xl mx-auto"></div>
+<body class="p-3 sm:p-5">
+<div id="app" class="max-w-7xl mx-auto"></div>
+<div id="overlay"></div>
 <script>
 const SERVER_URL = 'https://dynasty-online-game.onrender.com'; // เปลี่ยนเป็น URL ของ Render ถ้าต่างจากนี้
 const socket = io(SERVER_URL);
 const pid = localStorage.pid || (localStorage.pid = 'u' + Math.random().toString(36).slice(2, 10));
-let S = null, code = localStorage.code || '', formEra = -1, err = '';
+let S = null, code = localStorage.code || '', helpOpen = false, helpTab = 'stats', toastMsg = '', toastOk = false, form = null, OPT = { dp: 0, br: 0, rc: false }, lastAnim = '';
+const urlRoom = (new URLSearchParams(location.search).get('room') || '').toUpperCase();
 const RANK = ['I','II','III','IV','V'], SLOTS = [2,2,3,3,0], SAL = [1,2,3,4,0], TH = [2,2,4,5];
-const COLORS = ['#f59e0b','#38bdf8','#f472b6','#4ade80','#a78bfa','#fb7185'];
-const TYPES = { guard:'🛡️ ป้องกัน', lobby:'📣 วิ่งเต้น', realm:'🏛️ กิจการเมือง', intrigue:'🕵️ สืบ/แอบสมสู่', kidnap:'⛓️ ลักพาตัว', assassinate:'🗡️ ลอบสังหาร', family:'💍 ครอบครัว', petition:'📜 ขอเลื่อนยศ', decoy:'🎭 ตัวลวง' };
-const DESC = {
- guard:'[ลำดับ 1] ได้เต๋าป้องกันเพิ่ม +2 เมื่อถูกสืบ ลักพาตัว หรือลอบสังหารในยุคนี้',
- lobby:'[ลำดับ 1] เลือกผู้เล่น: สนับสนุน = เต๋าขอเลื่อนยศของเขา +2 / ขัดขวาง = −2',
- realm:'[ลำดับ 2] รีดภาษี = ได้เงิน (ยศ+1) แต่ไม่สงบ +1 · เกณฑ์ทหาร = จ่ายสูงสุด 2 ได้ทหารเท่ากัน (ถือได้ไม่เกิน 4)',
- intrigue:'[ลำดับ 3] สืบ = ชนะแล้วเลือก: ได้ความลับค่า 1 / ทำลายความลับที่เขาถือเกี่ยวกับคุณ / ชิงทายาทของคุณคืน (สำเร็จ 0 = ถูกสวนกลับ) · แอบสมสู่ = ต้องมีภรรยาทั้งคู่ ชนะและได้ ≥2 เลือกความลับค่า 3 หรือลูกลับ',
- kidnap:'[ลำดับ 4] ชนะ = ทายาทถูกกัก ประกาศค่าไถ่ 1-4 เงิน (เปลี่ยนไม่ได้) เจ้าของไถ่ได้ทุกเมื่อ ไม่มีคืนอัตโนมัติ · เจ้าของไม่สงบ +1 · ถือตัวประกันได้ทีละ 1 คน',
- assassinate:'[ลำดับ 5] จ่ายเงินล่วงหน้า (2 หรือ 3 เงินเมื่อเล่น 3 คน) ถ้าชนะผู้นำ/ทายาทตาย · ถ้าผู้นำเป้าหมายตายไปแล้วในยุคนี้ คำสั่งถูกยกเลิกโดยไม่เสียเงิน',
- family:'[ลำดับ 6] แต่งงาน (ซื้อภรรยาจากตลาด ถ้าหลายคนเล็งใบเดียวกันทอยบารมีแย่ง) · ผลิตทายาท (ต้องมีภรรยา) · ฝึกทายาท (+1 ค่าที่เลือก)',
- petition:'[ลำดับ 7] ทอยเต๋า = บารมี + ทหารที่ใช้(≤2) + กำลังรบ÷2 + วิ่งเต้น + โบนัสทายาท + เงินเสริม(≤2) ต้องได้ตามเกณฑ์ของยศ (ที่นั่งเต็ม +1 และคุณเลือกคนที่ถูกลดยศ)',
- decoy:'ไม่มีผล ใช้หลอกว่าวางคำสั่งไว้เยอะ' };
-const OPTS = { lobby:[['support','สนับสนุน'],['oppose','ขัดขวาง']], realm:[['tax','รีดภาษี'],['recruit','เกณฑ์ทหาร']], intrigue:[['spy','สืบข่าว'],['tryst','แอบสมสู่']], assassinate:[['leader','ผู้นำ'],['heir','ทายาท']], family:[['marry','แต่งงาน'],['breed','ผลิตทายาท'],['train','ฝึกทายาท']] };
-const NEEDT = ['lobby','intrigue','kidnap','assassinate'], NEEDPAY = ['intrigue','kidnap','assassinate','petition'];
-const COURT = { 'ขุนนางขอที่ดิน':'A จ่าย 2 → ไม่สงบ −1 | B ปฏิเสธ → บารมีสะสม +1 แต่ไม่สงบ +1', 'ทูตต่างแดน':'A จ่าย 1 → ทหาร 1 | B ไม่มีผล', 'เรื่องอื้อฉาว':'A จ่าย 2 ปกปิด | B ผู้เล่นซ้ายได้ความลับ 1 ของคุณ', 'ทายาทดื้อรั้น':'A ทายาท +1 ค่า แต่ไม่สงบ +1 | B ไม่มีผล', 'พ่อค้าเสนอส่วย':'A ได้เงิน 3 แต่ไม่สงบ +1 | B บารมีสะสม +1', 'ผู้อาวุโสขอคำปรึกษา':'A ทอยบารมี ≥1 → บารมีสะสม +1 ไม่งั้นเสียเงิน 1 | B ไม่มีผล' };
-const EVENT = { drought:['🌵 ภัยแล้ง','รีดภาษียุคนี้ทำให้ไม่สงบ +2 แทน +1'], border:['⚔️ ศึกชายแดน','ทุกคนทอยกำลังรบ ได้ <2 ไม่สงบ +1'], feast:['🎉 งานเลี้ยงหลวง','จ่ายเงิน 2 แลกบารมี 1 ได้ไม่จำกัด (ปุ่มด้านล่างตอนวางคำสั่ง)'], plague:['☠️ โรคระบาด','ปลายยุคทอยความชราด้วยระดับวัย +1 (แม้ก่อนยุค 4)'] };
-const T = {
- rank:'ยศ I–V: ยิ่งสูงยิ่งได้เงินเดือนและช่องวางคำสั่งมากขึ้น ถึงยศ V = จักรพรรดิ ชนะทันที',
- i:'บารมี (ค่าผู้นำ+ภรรยา สูงสุด 6): เป็นเต๋าตอนขอเลื่อนยศและแย่งภรรยา',
- n:'เล่ห์เหลี่ยม (สูงสุด 6): เป็นเต๋าฝ่ายโจมตี คือสืบ แอบสมสู่ ลักพาตัว ลอบสังหาร',
- m:'กำลังรบ (สูงสุด 6): เต๋าป้องกัน, ปราบกบฏ และหาร 2 เป็นเต๋าตอนขอเลื่อนยศ',
- gold:'เงิน: ใช้ลอบสังหาร ซื้อภรรยา เสริมเต๋า (สูงสุด +2 ต่อการทอย) และติดสินบนลดความไม่สงบ',
- inf:'บารมีสะสม: ได้จากขึ้นยศ ชนะกบฏ เปิดโปง · 2 บารมี = 1 คะแนนราชวงศ์ (สูงสุด 8) · ใช้ตัดสินเสมอ',
- score:'คะแนนราชวงศ์ (ใช้ตัดสินเมื่อครบ 7 ยุคไม่มีจักรพรรดิ): ยศ I/II/III/IV = 0/1/3/5 + บารมี÷2 (≤8) + ทายาท 2 + เงิน÷5 (≤3) − 1 ถ้าไม่สงบ ≥4 · ตัวเลขที่เห็นยังไม่รวมการ์ดความลับ',
- capt:'ทายาทถูกลักพาตัว: ไถ่คืนได้ทุกเมื่อด้วยค่าไถ่ที่ประกาศ (ขาดเงินใช้บารมีแทนได้ ≤2) ถ้าผู้นำตายระบบไถ่ให้อัตโนมัติเมื่อเงินพอ',
- unrest:'ความไม่สงบ: ถึง 6 เกิดกบฏทันที ทอยกำลังรบสู้ แพ้ = ยศลด เสียเงิน 3',
- sol:'ทหาร (สูงสุด 4): ใช้เสริมเต๋าขอเลื่อนยศหรือปราบกบฏได้ครั้งละไม่เกิน 2',
- wife:'ภรรยา: ให้โบนัสค่า 1 อย่าง บางใบมีของแถม (เงิน/ทหาร/เลื่อนยศ)',
- heir:'ทายาท: ผู้นำตายจะขึ้นครองต่อ (ไม่มี = ผู้สำเร็จราชการ 2/2/2 ไม่สงบ +3) · ค่าทายาทที่ถึง 3 ให้เต๋า +1 กับค่านั้นของผู้นำทันที (ถูกลักพาตัว/ลอบสังหารแล้วเสียโบนัส)',
- seal:'ตราประทับ 🔰: ผู้ถือได้แก้ผลก่อนเมื่อคำสั่งลำดับเท่ากัน หมุนทุกยุค',
- sec:'การ์ดความลับ (ถือได้ 3 ใบ): ใช้ 1 ใบ/ยุคในหน้าต่างความลับ หรือเก็บไว้จนจบเกมเพื่อคะแนน (ผู้ถือ +1/+2 เป้าหมาย −1/−2) · ทุกคนเห็นเป้าหมายของการ์ดแต่ไม่เห็นค่า',
- tok:'โทเคนคว่ำ: จำนวนคำสั่งที่วางแล้ว (คนอื่นไม่เห็นชนิด)' };
-const tip = (t, label) => `<span class="tip" tabindex="0" data-t="${esc(t)}">${label}</span>`;
-const STYLES = [['assassin','🗡️ Assassin'],['climber','🧗 Climber'],['warlord','⚔️ Warlord'],['balanced','⚖️ Balanced'],['schemer','📜 Schemer'],['turtle','🛡️ Turtle']];
-const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const btn = (c, label, js) => `<button onclick="${js}" class="px-3 py-2 rounded font-bold text-sm ${c}">${label}</button>`;
+const PCOL = ['#e6b85c','#5aa9e6','#e0709f','#4fc18f','#a98af0','#f08a5d'], STATC = { i:'#e6b85c', n:'#9a7ee8', m:'#d04a63' };
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const $ = id => document.getElementById(id);
+const OT = { guard:['🛡️','ป้องกัน'], lobby:['📣','วิ่งเต้น'], realm:['🏛️','กิจการเมือง'], intrigue:['🕵️','สืบ/สมสู่'], kidnap:['⛓️','ลักพาตัว'], assassinate:['🗡️','ลอบสังหาร'], family:['💍','ครอบครัว'], petition:['📜','ขอเลื่อนยศ'], decoy:['🎭','ตัวลวง'] };
+const DESC = {
+ guard:'[ลำดับ 1] เต๋าป้องกันเพิ่ม +2 กับคำสั่งโจมตีทุกอย่างที่ลงมาที่คุณในยุคนี้',
+ lobby:'[ลำดับ 1] เลือกผู้เล่น: สนับสนุน = เต๋าขอเลื่อนยศของเขา +2 · ขัดขวาง = −2',
+ realm:'[ลำดับ 2] รีดภาษี = ได้เงิน (ยศ+1) แต่ไม่สงบ +1 · เกณฑ์ทหาร = จ่าย 1 ได้ทหาร 1 (สูงสุด 2 ใบ ถือได้ไม่เกิน 4)',
+ intrigue:'[ลำดับ 3] สืบข่าว = ชนะแล้วเลือก ได้ความลับค่า 1 / ทำลายความลับที่เขาถือเกี่ยวกับคุณ / ชิงทายาทคืน (สำเร็จ 0 = ถูกสวนกลับ) · แอบสมสู่ = ต้องมีภรรยาทั้งคู่ ชนะและได้ ≥2 เลือกความลับค่า 3 หรือลูกลับ',
+ kidnap:'[ลำดับ 4] ชนะ = ทายาทถูกกัก ประกาศค่าไถ่ 1-4 เงิน (เปลี่ยนไม่ได้) เจ้าของไถ่ได้ทุกเมื่อ · เจ้าของไม่สงบ +1 · ถือตัวประกันได้ทีละ 1 คน',
+ assassinate:'[ลำดับ 5] จ่ายล่วงหน้า (2 เงิน, เล่น 3 คน = 3) ชนะ = ผู้นำ/ทายาทตาย · ถ้าผู้นำเป้าหมายตายไปแล้วในยุคนี้ คำสั่งถูกยกเลิกไม่เสียเงิน',
+ family:'[ลำดับ 6] แต่งงาน (ซื้อภรรยาจากตลาด) · ผลิตทายาท (ต้องมีภรรยา) · ฝึกทายาท (+1 ค่า) · รับบุตรบุญธรรม (จ่าย 4 ได้ทายาทสุ่มทันที ใช้ได้เมื่อไม่มีทายาท ผู้สำเร็จราชการจะหมดวาระ)',
+ petition:'[ลำดับ 7] ทอย = บารมี + โบนัสทายาท + ทหารที่ใช้(≤2) + กำลังรบ÷2 + วิ่งเต้น + เงินเสริม(≤2) ต้องได้ตามเกณฑ์ยศ (ที่นั่งเต็ม +1 และคุณเลือกคนที่ถูกลดยศ)',
+ decoy:'ไม่มีผล ใช้หลอกให้คนอื่นสับสนว่าวางคำสั่งไว้เยอะ' };
+const OPTS = { lobby:[['support','สนับสนุน +2'],['oppose','ขัดขวาง −2']], realm:[['tax','💰 รีดภาษี'],['recruit','🪖 เกณฑ์ทหาร']], intrigue:[['spy','สืบข่าว'],['tryst','แอบสมสู่']], assassinate:[['leader','ผู้นำ'],['heir','ทายาท']], family:[['marry','แต่งงาน'],['breed','ผลิตทายาท'],['train','ฝึกทายาท'],['adopt','รับบุตรบุญธรรม (4)']] };
+const NEEDT = ['lobby','intrigue','kidnap','assassinate'], NEEDPAY = ['intrigue','kidnap','assassinate','petition'];
+const COURT = { 'ขุนนางขอที่ดิน':['จ่าย 2 → ไม่สงบ −1','ปฏิเสธ → บารมีสะสม +1 แต่ไม่สงบ +1'], 'ทูตต่างแดน':['จ่าย 1 → ได้ทหาร 1','ส่งกลับ → ไม่มีผล'], 'เรื่องอื้อฉาว':['จ่าย 2 ปกปิด','ปล่อยไป → ผู้เล่นซ้ายได้ความลับค่า 1 เกี่ยวกับคุณ'], 'ทายาทดื้อรั้น':['ฝึกเข้ม → ทายาท +1 ค่า แต่ไม่สงบ +1','ปล่อย → ไม่มีผล'], 'พ่อค้าเสนอส่วย':['รับ → เงิน +3 แต่ไม่สงบ +1','ปฏิเสธ → บารมีสะสม +1'], 'ผู้อาวุโสขอคำปรึกษา':['ฟัง ทอยบารมี ≥1 → บารมีสะสม +1 ไม่งั้นเสียเงิน 1','ปฏิเสธ → ไม่มีผล'] };
+const EVENT = { drought:['🌵','ภัยแล้ง','รีดภาษียุคนี้ทำให้ไม่สงบ +2 แทน +1'], border:['⚔️','ศึกชายแดน','ทุกคนทอยกำลังรบ ได้ <2 ไม่สงบ +1'], feast:['🎉','งานเลี้ยงหลวง','จ่ายเงิน 2 แลกบารมีสะสม 1 ได้ไม่จำกัด (ปุ่มตอนวางคำสั่ง)'], plague:['☠️','โรคระบาด','ปลายยุคทอยความชราด้วยระดับวัย +1 (แม้ก่อนยุค 4)'] };
+const T = {
+ rank:'ยศ I–V: ยิ่งสูงยิ่งได้เงินเดือนและช่องคำสั่งมากขึ้น ถึงยศ V = จักรพรรดิ ชนะทันที',
+ i:'บารมี (ค่าผู้นำ+ภรรยา สูงสุด 6): เป็นเต๋าตอนขอเลื่อนยศและแย่งภรรยา',
+ n:'เล่ห์เหลี่ยม (สูงสุด 6): เต๋าฝั่งโจมตี คือสืบ แอบสมสู่ ลักพาตัว ลอบสังหาร',
+ m:'กำลังรบ (สูงสุด 6): เต๋าป้องกัน ปราบกบฏ และหาร 2 เป็นเต๋าตอนขอเลื่อนยศ',
+ gold:'เงิน: ใช้ลอบสังหาร ซื้อภรรยา รับบุตรบุญธรรม เสริมเต๋า (≤ +2 ต่อการทอย) และติดสินบนลดความไม่สงบ',
+ inf:'บารมีสะสม: ได้จากขึ้นยศ ชนะกบฏ เปิดโปง · 2 บารมี = 1 คะแนนราชวงศ์ (สูงสุด 8) · ใช้ตัดสินเสมอ',
+ score:'คะแนนราชวงศ์ (ตัดสินเมื่อครบ 7 ยุคไม่มีจักรพรรดิ): ยศ I/II/III/IV = 0/1/3/5 + บารมี÷2 (≤8) + ทายาท 2 + เงิน÷5 (≤3) − 1 ถ้าไม่สงบ ≥4 · ตัวเลขนี้ยังไม่รวมการ์ดความลับ',
+ unrest:'ความไม่สงบ: ถึง 6 เกิดกบฏทันที ทอยกำลังรบสู้ แพ้ = ยศลด เสียเงิน 3',
+ sol:'ทหาร (สูงสุด 4): เสริมเต๋าขอเลื่อนยศหรือปราบกบฏได้ครั้งละไม่เกิน 2',
+ wife:'ภรรยา: ให้โบนัสค่า บางใบมีของแถม (เงิน/ทหาร/เลื่อนยศถึงยศ III) หายไปเมื่อผู้นำตาย',
+ heir:'ทายาท: ผู้นำตายจะขึ้นครองต่อ · ค่าทายาทที่ถึง 3 ให้เต๋า +1 กับค่านั้นของผู้นำทันที (ถูกลักพาตัว/ลอบสังหารแล้วเสียโบนัส)',
+ regent:'ผู้สำเร็จราชการ (ค่า 2/2/2 วัย 1): ได้เมื่อไม่มีทายาท หมดวาระทันทีเมื่อตระกูลมีทายาท (ผลิต/รับบุตรบุญธรรม/ไถ่คืน) โดยไม่ไม่สงบเพิ่ม',
+ age:'ระดับวัยเริ่มต้น 0 หรือ 1: ปลายยุค (ตั้งแต่ยุค 4) ทอย 1 ลูก ตายถ้า ≤ ระดับวัยของยุค + ค่านี้',
+ seal:'ตราประทับ 🔰: ผู้ถือได้แก้ผลก่อนเมื่อคำสั่งลำดับเท่ากัน หมุนทุกยุค',
+ sec:'การ์ดความลับ (ถือได้ 3 ใบ): ใช้ 1 ใบ/ยุคในหน้าต่างความลับ หรือเก็บไว้จนจบเกมเพื่อคะแนน (ผู้ถือ +1/+2 เป้าหมาย −1/−2) · ทุกคนเห็นเป้าหมายแต่ไม่เห็นค่า',
+ tok:'โทเคนคว่ำ: จำนวนคำสั่งที่วางแล้ว (คนอื่นไม่เห็นชนิดจนเปิด)',
+ capt:'ทายาทถูกลักพาตัว: ไถ่คืนได้ทุกเมื่อด้วยค่าไถ่ที่ประกาศ (ขาดเงินใช้บารมีแทนได้ ≤2) ถ้าผู้นำตายระบบไถ่ให้อัตโนมัติเมื่อเงินพอ' };
+const STYLES = [['assassin','🗡️','Assassin','ลอบสังหารคู่แข่งที่นำ'],['climber','🧗','Climber','ไต่ยศตรงๆ'],['warlord','⚔️','Warlord','สะสมทหาร ใช้กำลัง'],['balanced','⚖️','Balanced','สมดุลทุกด้าน'],['schemer','📜','Schemer','สืบข่าว เก็บความลับ'],['turtle','🛡️','Turtle','ป้องกันก่อน ค่อยขึ้น']];
+const tip = (t, label) => `<span class="tip" tabindex="0" data-t="${esc(t)}">${label}</span>`;
+const btn = (cls, label, js, extra = '') => `<button class="btn ${cls}" onclick="${js}" ${extra}>${label}</button>`;
 
+// ---------- socket ----------
 socket.on('connect', () => { if (code && !S) socket.emit('joinRoom', { code, name: localStorage.name || '', pid }); });
-socket.on('state', s => { S = s; code = s.code; localStorage.code = code; err = ''; render(); });
-socket.on('err', m => { err = m; if (!S) { localStorage.removeItem('code'); code = ''; } render(); });
-
-const nm = () => $('name').value;
+socket.on('state', s => { S = s; code = s.code; localStorage.code = code; render(); });
+socket.on('err', m => { if (!S) { localStorage.removeItem('code'); code = ''; } toast(m); });
+function toast(m, ok) { toastMsg = m; toastOk = !!ok; render(); clearTimeout(toast.t); toast.t = setTimeout(() => { toastMsg = ''; render(); }, 3200); }
+const nm = () => ($('name') ? $('name').value.trim() : localStorage.name || '');
 function create() { localStorage.name = nm(); socket.emit('createRoom', { name: nm(), pid }); }
-function join() { localStorage.name = nm(); code = $('code').value.toUpperCase(); socket.emit('joinRoom', { code, name: nm(), pid }); }
+function join() { localStorage.name = nm(); code = $('code').value.trim().toUpperCase(); socket.emit('joinRoom', { code, name: nm(), pid }); }
 const addBot = style => socket.emit('addBot', { code, style });
 const rmBot = p => socket.emit('removeBot', { code, pid: p });
 const start = () => socket.emit('startGame', code);
 const court = c => socket.emit('court', { code, choice: c });
 const rollDice = () => socket.emit('rollDice', code);
-let OPT = { dp: 0, br: 0, rc: false };
-const useSecret = i => socket.emit('secret', { code, idx: i, mode: $('sm' + i).value, tok: $('tk' + i) ? +$('tk' + i).value : -1 });
-const sendOpts = () => { OPT = { dp: +$('dp').value, br: +$('br').value, rc: $('rc').checked }; socket.emit('opts', { code, defPay: OPT.dp, bribe: OPT.br, rejectChild: OPT.rc }); };
 const ready = () => socket.emit('ready', code);
 const ransom = () => socket.emit('ransom', code);
 const releaseHostage = () => socket.emit('release', code);
 const feast = () => socket.emit('feast', code);
 const rematch = () => socket.emit('rematch', code);
-function leave() { if (S && S.game && S.game.phase !== 'over' && !confirm('ออกจากห้อง? (กลับเข้าใหม่ได้ด้วยรหัสห้องเดิม)')) return; socket.emit('leaveRoom', code); localStorage.removeItem('code'); setTimeout(() => location.reload(), 150); }
+const useSecret = (i, mode, tok) => socket.emit('secret', { code, idx: i, mode, tok: tok == null ? -1 : tok });
+let secSel = {};
+function pickSec(i, k, v) { secSel[i] = Object.assign(secSel[i] || { mode: 'extort', tok: 0 }, { [k]: v }); render(); }
+function setOpt(k, v) { OPT[k] = v; socket.emit('opts', { code, defPay: OPT.dp, bribe: OPT.br, rejectChild: OPT.rc }); render(); }
+function leave() { if (S && S.game && S.game.phase !== 'over' && !confirm('ออกจากห้อง? (กลับเข้าใหม่ได้ด้วยรหัสห้องเดิม)')) return; socket.emit('leaveRoom', code); localStorage.removeItem('code'); setTimeout(() => location.href = location.pathname, 150); }
+function copyText(t, msg) { (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast(msg, true), () => prompt('คัดลอกข้อความนี้', t)); }
+const inviteLink = () => location.origin + location.pathname + '?room=' + code;
+function openHelp(tab) { helpOpen = true; if (tab) helpTab = tab; render(); }
+
+// ---------- helpers ----------
+const pl = id => S && S.game && S.game.players.find(p => p.id === id);
+const nameOf = id => { const q = pl(id) || (S && S.members.find(m => m.pid === id)); return q && q.name; };
+const idxOf = id => { const L = S && S.game ? S.game.players.map(p => p.id) : S ? S.members.map(m => m.pid) : []; const i = L.indexOf(id); return i < 0 ? 0 : i; };
+const colorOf = id => PCOL[idxOf(id) % 6];
+const av = (id, name, size = 36) => `<span class="av" style="--c:${colorOf(id)};width:${size}px;height:${size}px;font-size:${Math.round(size * .46)}px">${esc([...(name || '?')][0])}</span>`;
+const rankPips = r => [1,2,3,4,5].map(k => `<i class="rk ${k <= r ? 'on' : ''} ${k === 5 ? 'v' : ''}"></i>`).join('');
+const meter = u => `<div class="meter ${u >= 5 ? 'danger' : ''}">${[1,2,3,4,5,6].map(k => `<i class="${k <= u ? 'on ' + (u >= 5 ? 'h' : u >= 3 ? 'm' : '') : ''}"></i>`).join('')}</div>`;
+const seatCap = (r, n) => r === 3 ? n - 1 : r === 4 ? 2 : r === 5 ? 1 : 99;
+const section = (title, body, cls = '') => `<div class="card p-4 ${cls}"><div class="sec-title mb-3">${title}</div>${body}</div>`;
+const orderLabel = x => `${OT[x.type] ? OT[x.type][0] + ' ' + OT[x.type][1] : x.type}${x.target ? ' → ' + esc(nameOf(x.target) || '?') : ''}${x.opt && OPTS[x.type] ? ' · ' + esc((OPTS[x.type].find(o => o[0] === x.opt) || ['', ''])[1]) : ''}${x.type === 'kidnap' && x.ransom ? ' · ไถ่ ' + x.ransom : ''}`;
 
 function render() {
-  const app = $('app');
-  if (!S) { app.innerHTML = home(); return; }
-  if (!S.started) { app.innerHTML = lobby(); return; }
-  const g = S.game, me = g.players.find(p => p.id === S.me);
-  const keep = formEra === g.era && me.placed === null && $('orders') && g.phase === 'orders';
-  if (keep) { $('main').innerHTML = mainPanels(g, me); updateSide(g, me); return; }
-  app.innerHTML = game(g, me); updateSide(g, me);
-  if (me.placed === null && g.phase === 'orders') { formEra = g.era; buildForm(g, me); } else formEra = -1;
-}
-function home() {
-  return `<div class="max-w-md mx-auto mt-10 bg-gray-800 p-8 rounded-xl border border-amber-500/50 text-center">
-  <h1 class="text-4xl font-extrabold text-amber-500">DYNASTY</h1><p class="text-gray-400 text-sm mb-6">Playtest · กติกา v0.12</p>
-  <input id="name" value="${esc(localStorage.name || '')}" placeholder="ชื่อตระกูล" class="w-full p-3 mb-4 rounded bg-gray-700 text-center outline-none">
-  ${btn('w-full bg-amber-600 hover:bg-amber-500 mb-4', 'สร้างห้องใหม่', 'create()')}
-  <div class="flex gap-2"><input id="code" maxlength="6" placeholder="รหัส 6 หลัก" class="flex-grow p-3 rounded bg-gray-700 text-center uppercase outline-none">${btn('bg-green-600 hover:bg-green-500', 'Join', 'join()')}</div>
-  <p class="text-red-400 text-sm mt-3">${esc(err)}</p></div>`;
-}
-function lobby() {
-  const host = S.host === S.me;
-  return `<div class="max-w-2xl mx-auto mt-6 bg-gray-800 p-6 rounded-xl">
-  <div class="text-right mb-2">${btn('bg-gray-700 hover:bg-red-700 text-xs', '⬅ ออกจากห้อง', 'leave()')}</div>
-  <div class="text-center mb-4"><h2 class="text-xl font-bold text-amber-400">รหัสห้อง</h2><div class="text-5xl font-mono text-green-400 font-bold">${S.code}</div><p class="text-xs text-gray-400 mt-1">เล่น 3-6 คน (บอทนับเป็นผู้เล่น)</p></div>
-  <ul class="space-y-2 mb-4">${S.members.map(m => `<li class="p-2 bg-gray-700 rounded flex justify-between"><span>${esc(m.name)}</span><span class="text-xs">${m.bot ? m.style + (host ? ` <a class="text-red-400 cursor-pointer" onclick="rmBot('${m.pid}')">✕</a>` : '') : 'ผู้เล่น'}</span></li>`).join('')}</ul>
-  ${host ? `<div class="grid grid-cols-3 gap-2 mb-4">${STYLES.map(([k, l]) => btn('bg-indigo-900 hover:bg-indigo-700 text-xs', l, `addBot('${k}')`)).join('')}</div>${btn('w-full bg-amber-500 text-gray-900 hover:bg-amber-400', 'เริ่มเกม!', 'start()')}` : '<p class="text-center text-gray-400">รอเจ้าของห้องเริ่มเกม…</p>'}
-  <p class="text-red-400 text-sm mt-2">${esc(err)}</p></div>`;
+  const app = $('app'), y = window.scrollY;
+  app.innerHTML = !S ? home() : !S.started ? lobby() : gameScreen();
+  $('overlay').innerHTML = (helpOpen ? helpModal() : '') + (toastMsg ? `<div class="toast ${toastOk ? 'ok' : ''}">${esc(toastMsg)}</div>` : '');
+  if (S && S.started) window.scrollTo(0, y);
 }
 
-// ---------- เกม ----------
-function game(g, me) {
-  const over = g.phase === 'over', ev = EVENT[g.event];
-  return `<div class="flex flex-wrap justify-between items-center gap-2 mb-3">
-   <div class="flex items-center gap-3"><h1 class="text-amber-400 font-bold text-xl">DYNASTY</h1>
-    <div class="flex gap-1">${[1,2,3,4,5,6,7].map(e => `<span class="w-6 h-6 rounded-full text-xs flex items-center justify-center ${e < g.era ? 'bg-amber-700' : e === g.era ? 'bg-amber-400 text-gray-900 font-bold' : 'bg-gray-700'}">${e}</span>`).join('')}</div></div>
-   <div class="text-xs flex items-center gap-3">${ev ? tip(ev[1], 'เหตุการณ์: ' + ev[0]) : ''}${btn('bg-gray-700 hover:bg-red-700 text-xs', '⬅ ออก', 'leave()')}</div></div>
-  ${over ? `<div class="bg-amber-600 p-4 rounded mb-3 text-center text-xl font-bold">🏆 ผู้ชนะ: ${esc(g.winner)}<div class="mt-2">${S.host === S.me ? btn('bg-gray-900 mr-2', '🔄 กลับล็อบบี้เล่นใหม่', 'rematch()') : '<span class="text-sm">รอเจ้าของห้องเริ่มรอบใหม่ หรือ</span>'} ${btn('bg-gray-900', 'ออก', 'leave()')}</div></div>` : ''}
-  ${replayBox(me)}
-  <div id="side"></div>
-  <div id="main">${mainPanels(g, me)}</div>
-  <div id="orders"></div>
-  <details class="bg-gray-800 rounded p-3 mb-3 text-xs"><summary class="cursor-pointer font-bold text-amber-300">📖 คู่มือย่อ: ความหมายของค่าและคำสั่ง</summary>
-   <div class="grid md:grid-cols-2 gap-x-6 gap-y-1 mt-2">${Object.entries(T).map(([k, v]) => `<div>• ${v}</div>`).join('')}</div>
-   <div class="mt-2 font-bold text-amber-300">คำสั่ง (เรียงตามลำดับแก้ผล)</div>${Object.entries(TYPES).map(([k, l]) => `<div>${l}: ${DESC[k]}</div>`).join('')}
-   <div class="mt-2 text-gray-400">ลำดับยุค: เหตุการณ์ → การ์ดราชสำนัก → รายได้ → วางคำสั่งลับ → เปิดคำสั่ง → <b>หน้าต่างความลับ</b> → แก้ผล → ปลายยุค (ติดสินบน, ทอยวัยตั้งแต่ยุค 4)</div>
-   <div class="mt-1 text-gray-400">เต๋า: ทอย d6 ลูกละ 4-6 = สำเร็จ · ใช้ได้สูงสุด 10 ลูก · เสมอ = ฝ่ายป้องกันชนะ</div></details>
-  <div class="bg-gray-800 p-3 rounded text-xs space-y-1 max-h-56 overflow-y-auto" id="log">${[...g.log].reverse().map(l => `<div>• ${esc(l)}</div>`).join('')}</div>`;
+// ---------- หน้าแรก / ล็อบบี้ ----------
+function home() {
+  return `<div class="min-h-[90vh] flex flex-col items-center justify-center text-center fade-in">
+  <div class="text-gold display text-xs sm:text-sm mb-3">⚜ ไต่เต้าอำนาจ · ดราม่าตระกูล ⚜</div>
+  <h1 class="hero-title display">DYNASTY</h1>
+  <p class="text-mute text-sm mt-2 mb-8">3-6 ผู้เล่น · 7 ยุค · กติกา v0.13 (Playtest)</p>
+  <div class="card p-6 w-full max-w-md text-left">
+   <label class="text-xs text-mute">ชื่อตระกูลของคุณ</label>
+   <input id="name" class="fld mt-1 mb-4" maxlength="16" placeholder="เช่น ตระกูลมังกร" value="${esc(localStorage.name || '')}">
+   ${btn('btn-gold btn-lg w-full', '⚜ สร้างห้องใหม่', 'create()')}
+   <div class="flex items-center gap-3 my-4 text-xs text-mute"><div class="h-px flex-1" style="background:var(--line)"></div>หรือเข้าร่วม<div class="h-px flex-1" style="background:var(--line)"></div></div>
+   <div class="flex gap-2"><input id="code" class="fld text-center uppercase tracking-widest" maxlength="6" placeholder="รหัสห้อง" value="${esc(urlRoom)}">${btn('btn-green', 'เข้าร่วม', 'join()')}</div>
+  </div>
+  <div class="flex flex-wrap justify-center gap-2 mt-6 text-xs text-mute"><span class="badge">🎲 กดทอยเต๋าทีละคน</span><span class="badge">🤖 เพิ่มบอทได้ 6 แบบ</span><span class="badge">🔗 ชวนเพื่อนด้วยลิงก์</span></div></div>`;
 }
-function mainPanels(g, me) {
-  return `<div class="grid lg:grid-cols-3 gap-3 mb-3"><div class="lg:col-span-2 grid md:grid-cols-2 gap-3">${g.players.map(p => card(p, me)).join('')}</div>${dash(g, me)}</div>`;
+function lobby() {
+  const host = S.host === S.me, n = S.members.length;
+  return `<div class="max-w-3xl mx-auto fade-in"><div class="flex justify-between items-center mb-4"><div class="display text-gold">⚜ DYNASTY</div>${btn('btn-ghost btn-sm', '⬅ ออกจากห้อง', 'leave()')}</div>
+  <div class="card p-6 text-center mb-4"><div class="text-xs text-mute">รหัสห้อง</div><div class="display text-5xl sm:text-6xl text-gold my-2" style="letter-spacing:.25em">${S.code}</div>
+   <div class="flex justify-center gap-2 flex-wrap">${btn('btn-sm', '📋 คัดลอกรหัส', `copyText('${S.code}','คัดลอกรหัสแล้ว')`)}${btn('btn-sm', '🔗 คัดลอกลิงก์เชิญ', `copyText(inviteLink(),'คัดลอกลิงก์เชิญแล้ว')`)}</div></div>
+  <div class="grid md:grid-cols-5 gap-4">
+   <div class="md:col-span-3">${section(`👥 ผู้เล่น ${n}/6 <span class="badge ${n >= 3 ? 'ok' : 'warn'}">${n >= 3 ? 'พร้อมเริ่ม' : 'ต้องมีอย่างน้อย 3'}</span>`,
+    `<div class="space-y-2">${S.members.map((m, i) => `<div class="flex items-center gap-3 p-2 rounded-xl" style="background:rgba(0,0,0,.2)">${av(m.pid, m.name, 38)}<div class="flex-1 min-w-0"><div class="font-semibold truncate">${esc(m.name)} ${m.pid === S.me ? '<span class="badge gold">คุณ</span>' : ''} ${i === 0 ? '<span class="badge">เจ้าของห้อง</span>' : ''}</div><div class="text-xs text-mute">${m.bot ? '🤖 บอท · ' + m.style : 'ผู้เล่น'}</div></div>${m.bot && host ? btn('btn-sm btn-ghost', '✕', `rmBot('${m.pid}')`) : ''}</div>`).join('')}</div>`)}</div>
+   <div class="md:col-span-2">${host ? section('🤖 เพิ่มบอท', `<div class="grid grid-cols-2 gap-2">${STYLES.map(([k, ic, nme, d]) => `<button class="otype" style="min-height:70px" onclick="addBot('${k}')"><span class="ic">${ic}</span>${nme}<span class="font-normal" style="font-size:.62rem">${d}</span></button>`).join('')}</div>`) : section('⏳ รอเจ้าของห้อง', '<p class="text-sm text-mute">เจ้าของห้องจะเพิ่มบอทและกดเริ่มเกม</p>')}</div></div>
+  ${host ? `<div class="mt-4">${btn('btn-gold btn-lg w-full' + (n < 3 ? ' off' : ''), '⚔️ เริ่มเกม!', 'start()')}</div>` : ''}</div>`;
 }
-function replayBox(me) {
+
+// ---------- หน้าเกม: ส่วนหัว ขั้นตอน แบนเนอร์ ----------
+const STEPS = ['เหตุการณ์', 'ราชสำนัก', 'วางคำสั่ง', 'หน้าต่างความลับ', 'แก้ผล', 'ปลายยุค'];
+const stepIdx = (g, me) => g.phase === 'orders' ? (me.court ? 1 : 2) : g.phase === 'window' ? 3 : g.phase === 'resolve' ? 4 : 5;
+function topbar(g) {
+  const ev = EVENT[g.event];
+  const dots = [1,2,3,4,5,6,7].map(e => `<div class="eraDot ${e < g.era ? 'done' : e === g.era ? 'cur' : ''}">${e}</div>${e < 7 ? `<div class="eraLine ${e < g.era ? 'done' : ''}"></div>` : ''}`).join('');
+  return `<div class="flex flex-wrap items-center justify-between gap-3 mb-3"><div class="flex items-center gap-4 flex-wrap"><div class="display text-gold text-lg">⚜ DYNASTY</div><div class="flex items-center">${dots}</div></div>
+  <div class="flex items-center gap-2 flex-wrap">${ev ? `<span class="badge warn">${tip(ev[2], ev[0] + ' ' + ev[1])}</span>` : ''}${btn('btn-sm', '📖 คู่มือ', 'openHelp()')}${btn('btn-sm btn-ghost', '⬅ ออก', 'leave()')}</div></div>`;
+}
+const stepper = (g, me) => { const c = stepIdx(g, me); return `<div class="flex mb-4 overflow-x-auto">${STEPS.map((s, i) => `<div class="step ${i < c ? 'done' : i === c ? 'cur' : ''}">${i + 1}. ${s}</div>`).join('')}</div>`; };
+function banner(g, me) {
+  if (g.phase === 'over') return '';
+  const wait = esc(S.waiting.join(', ') || '—');
+  let ic = '⏳', t = '', sub = '', hl = false;
+  if (g.phase === 'orders') {
+    if (!me.placed) { ic = '✍️'; hl = true; t = me.court ? 'เลือกการ์ดราชสำนักก่อน แล้ววางคำสั่งลับ' : `ตาคุณ: วางคำสั่งลับ ${SLOTS[me.rank - 1]} ช่อง`; sub = `ทุกคนวางพร้อมกัน · ยังไม่เสร็จ: ${wait}`; }
+    else { t = 'วางคำสั่งแล้ว รอคนอื่น'; sub = `ยังไม่เสร็จ: ${wait}`; }
+  } else if (g.phase === 'window') { ic = '🔓'; hl = !me.ready; t = 'เปิดคำสั่งแล้ว — หน้าต่างความลับ'; sub = me.ready ? `คุณพร้อมแล้ว รอ: ${wait}` : 'ใช้การ์ดความลับได้ 1 ใบ แล้วกด "พร้อม"'; }
+  else if (g.phase === 'resolve') { ic = '🎲'; t = 'กำลังแก้ผลคำสั่งตามลำดับ'; sub = 'เจ้าของการทอยต้องกดทอยเต๋าเอง'; }
+  else { t = 'จบยุค กำลังเริ่มยุคถัดไป…'; }
+  return `<div class="card ${hl ? 'card-hl glow' : ''} p-4 flex items-center gap-4 fade-in"><div class="text-3xl">${ic}</div><div><div class="font-bold">${t}</div><div class="text-xs text-mute">${sub}</div></div></div>`;
+}
+
+// ---------- เวทีลูกเต๋า ----------
+function dieFace(f, cls) {
+  const P = { 1:[4], 2:[0,8], 3:[0,4,8], 4:[0,2,6,8], 5:[0,2,4,6,8], 6:[0,2,3,5,6,8] }[f] || [];
+  return `<div class="die ${cls}">${[0,1,2,3,4,5,6,7,8].map(k => `<i class="${P.includes(k) ? 'on' : ''}"></i>`).join('')}</div>`;
+}
+function diceStage(me) {
   const r = S.replay; if (!r) return '';
   const c = r.cur;
-  if (!c) return `<div class="bg-gray-800 border border-amber-500 rounded p-3 mb-3 text-center text-sm">กำลังแก้ผลคำสั่ง…</div>`;
-  const mine = c.pid === me.id;
-  let h = `<div class="bg-gray-800 border-2 border-amber-500 rounded p-4 mb-3 text-center"><div class="text-xs text-gray-400">แก้ผลคำสั่ง · การทอยที่ ${r.n}/${r.total}</div>
-   <div class="font-bold text-lg">${esc(c.name)}: ${esc(c.label)}</div><div class="text-sm text-gray-300">เต๋า ${c.n} ลูก (4-6 = สำเร็จ)</div>`;
-  if (c.revealed) h += `<div class="my-2">${c.faces.map(f => `<span class="die roll ${c.die ? 'bg-gray-600' : f >= 4 ? 'bg-green-600' : 'bg-red-800'}">${f}</span>`).join('') || '—'}</div><div class="font-bold">${c.die ? (c.s ? '💀 ผู้นำตาย' : '✅ รอดไปได้') : 'สำเร็จ ' + c.s + ' ครั้ง'}</div>`;
-  else h += mine ? `<div class="mt-3">${btn('bg-amber-500 hover:bg-amber-400 text-gray-900 text-lg animate-pulse', '🎲 กดทอยเต๋า!', 'rollDice()')}</div>` : `<div class="mt-2 text-gray-400">รอ ${esc(c.name)} กดทอยเต๋า…</div>`;
-  return h + '</div>';
+  if (!c) return `<div class="card p-4 text-center text-mute text-sm">กำลังแก้ผลคำสั่ง…</div>`;
+  const mine = c.pid === me.id, key = r.n + '-' + c.revealed, anim = key !== lastAnim ? 'tumble' : ''; lastAnim = key;
+  const faces = c.revealed ? c.faces.map(f => `<span class="${anim}" style="display:inline-block">${dieFace(f, c.die ? 'neu' : f >= 4 ? 'win' : 'lose')}</span>`).join('') : Array.from({ length: c.n }, () => dieFace(0, 'blank')).join('');
+  const res = c.revealed ? (c.die ? (c.s ? '<span class="text-red-300">💀 ผู้นำตาย</span>' : '<span class="text-green-300">✅ รอดไปได้</span>') : `<span class="${c.s ? 'text-green-300' : 'text-red-300'}">สำเร็จ ${c.s} / ${c.n}</span>`) : '';
+  const recent = S.game.log.filter(l => l.includes('🎲')).slice(-3).reverse();
+  return `<div class="card card-hl p-5 text-center fade-in"><div class="text-xs text-mute mb-2">การทอยที่ ${r.n} / ${r.total}</div>
+  <div class="flex items-center justify-center gap-3 mb-1">${av(c.pid, c.name, 40)}<div class="text-left"><div class="font-bold">${esc(c.name)}</div><div class="text-sm text-gold">${esc(c.label)}</div></div></div>
+  <div class="text-xs text-mute mb-2">${c.n} ลูก · 4-6 = สำเร็จ</div>
+  <div class="flex flex-wrap justify-center my-2 min-h-[56px]">${c.n ? faces : '<span class="text-mute text-sm">ไม่มีเต๋า = ล้มเหลวทันที</span>'}</div>
+  <div class="text-xl font-bold my-2 min-h-[28px]">${res}</div>
+  ${!c.revealed ? (mine ? btn('btn-gold btn-lg pulse', '🎲 กดทอยเต๋า!', 'rollDice()') : `<div class="text-mute text-sm">รอ ${esc(c.name)} กดทอยเต๋า…</div>`) : ''}
+  ${recent.length ? `<div class="mt-4 space-y-1 text-left">${recent.map(l => `<div class="logline roll"><span>🎲</span><span>${esc(l.replace(/^\[ยุค \d+\]\s*🎲\s*/, ''))}</span></div>`).join('')}</div>` : ''}</div>`;
 }
-function card(p, me) {
-  const l = p.lead, mine = p.id === me.id;
-  return `<div class="p-3 rounded-lg border ${mine ? 'border-amber-500' : 'border-gray-700'} bg-gray-800">
-  <div class="font-bold text-amber-300">${esc(p.name)} ${p.seal ? tip(T.seal, '🔰') : ''} <span class="text-xs bg-gray-700 px-1 rounded">${tip(T.rank, 'ยศ ' + RANK[p.rank - 1])}</span> ${p.bot ? `<span class="text-[10px] text-gray-400">${p.style}</span>` : ''}</div>
-  <div class="text-xs text-gray-300">ผู้นำ: ${esc(l.name)} (${l.age ? 'ชรา' : 'หนุ่มสาว'})</div>
-  <div class="grid grid-cols-3 gap-1 text-xs mt-2">
-   <div class="bg-gray-700 p-1">${tip(T.i, '✨ บารมี')} ${p.st.i}</div><div class="bg-gray-700 p-1">${tip(T.n, '🕵️ เล่ห์')} ${p.st.n}</div><div class="bg-gray-700 p-1">${tip(T.m, '⚔️ รบ')} ${p.st.m}</div>
-   <div class="bg-gray-700 p-1 text-yellow-400">${tip(T.gold, '💰 เงิน')} ${p.money}</div><div class="bg-gray-700 p-1">${tip(T.inf, '👑 แต้ม')} ${p.inf}</div><div class="bg-gray-700 p-1 text-red-400">${tip(T.unrest, '🔥 ไม่สงบ')} ${p.unrest}/6</div></div>
-  <div class="text-xs mt-2 text-gray-400">${tip(T.wife, 'ภรรยา')}: ${p.wife ? esc(p.wife.name) : '—'} · ${tip(T.heir, 'ทายาท')}: ${mine ? (p.heir ? esc(p.heir.name) : '—') : (p.heirKnown ? 'มี' : '—')}${p.heirK ? ' (ถูกกัก)' : ''}<br>
-  ${tip(T.sec, 'ความลับ')} ${p.secretAbout.length}${p.secretAbout.length ? ' (เกี่ยวกับ ' + p.secretAbout.map(a => esc((nameOf(a) || '?'))).join(', ') + ')' : ''} · ${tip(T.tok, 'โทเคนคว่ำ')} ${p.tokensPlaced}${mine ? ` · ${tip(T.sol, 'ทหาร')} ${p.soldiers}` : ''}<br>${tip(T.score, '🏅 คะแนนราชวงศ์')} ${p.score}${p.hb && (p.hb.i + p.hb.n + p.hb.m) ? ' · โบนัสทายาท: ' + ['i', 'n', 'm'].filter(k => p.hb[k]).map(k => ({ i: 'บารมี', n: 'เล่ห์', m: 'รบ' })[k]).join('/') + ' +1' : ''}
-  ${p.capt ? `<br>${tip(T.capt, '⛓️ ทายาทถูกกัก')} ค่าไถ่ ${p.capt.ransom}` : ''}${p.holding ? `<br>⛓️ กักทายาทของ ${esc(nameOf(p.holding.owner))} (ค่าไถ่ ${p.holding.ransom})` : ''}</div></div>`;
-}
-const nameOf = id => { const q = S && S.game && S.game.players.find(p => p.id === id); return q && q.name; };
-const seatCap = (r, n) => r === 3 ? n - 1 : r === 4 ? 2 : r === 5 ? 1 : 99;
-function binomAtLeast(n, k) { if (k <= 0) return 1; if (k > n) return 0; let s = 0, c = 1; for (let i = 0; i <= n; i++) { if (i >= k) s += c; c = c * (n - i) / (i + 1); } return s / Math.pow(2, n); }
-function dash(g, me) {
-  const n = g.players.length, rows = [...g.players].sort((a, b) => b.rank - a.rank || b.inf - a.inf || b.money - a.money);
-  let h = `<div class="space-y-3"><div class="bg-gray-800 p-3 rounded"><div class="font-bold text-amber-300 text-sm mb-2">📊 อันดับ (ยศ → บารมี → เงิน) · 🏅 = คะแนนราชวงศ์ปัจจุบัน</div>
-  <table class="w-full text-xs"><tr class="text-gray-400"><td></td><td>ชื่อ</td><td>${tip(T.rank, 'ยศ')}</td><td>${tip(T.score, '🏅')}</td><td>${tip(T.inf, '👑')}</td><td>${tip(T.gold, '💰')}</td><td>${tip(T.unrest, '🔥 ไม่สงบ')}</td></tr>
-  ${rows.map((p, i) => `<tr class="${p.id === me.id ? 'text-amber-300' : ''}"><td>${i + 1}</td><td>${esc(p.name)}</td><td>${RANK[p.rank - 1]}</td><td>${p.score}</td><td>${p.inf}</td><td>${p.money}</td><td><div class="bg-gray-700 h-2 rounded w-full"><div class="h-2 rounded ${p.unrest >= 4 ? 'bg-red-500' : 'bg-orange-400'}" style="width:${p.unrest / 6 * 100}%"></div></div></td></tr>`).join('')}</table></div>
-  <div class="bg-gray-800 p-3 rounded text-xs"><div class="font-bold text-amber-300 text-sm mb-1">🪑 ที่นั่งยศสูง</div>${[3, 4, 5].map(r => { const hs = g.players.filter(p => p.rank === r), cap = seatCap(r, n); return `<div>ยศ ${RANK[r - 1]} (${hs.length}/${cap}): ${hs.map(p => esc(p.name)).join(', ') || 'ว่าง'}</div>`; }).join('')}
-   <div class="text-gray-400 mt-1">ที่นั่งเต็ม = ขอเลื่อนยศยากขึ้น +1 และผู้ถือที่แต้มน้อยสุดถูกลดยศ</div></div>`;
-  if (me.rank < 5) {
-    const dice = Math.min(10, me.st.i + (me.hb ? me.hb.i : 0) + Math.min(2, me.soldiers || 0) + Math.floor(me.st.m / 2)), full = g.players.filter(p => p.rank === me.rank + 1).length >= seatCap(me.rank + 1, n), need = TH[me.rank - 1] + (full ? 1 : 0);
-    h += `<div class="bg-gray-800 p-3 rounded text-xs"><div class="font-bold text-amber-300 text-sm mb-1">📜 โอกาสขอเลื่อนยศของคุณ</div>เต๋าพื้นฐาน ${dice} ลูก (บารมี ${me.st.i}${me.hb && me.hb.i ? ' + ทายาท 1' : ''} + ทหาร ${Math.min(2, me.soldiers || 0)} + รบ÷2 ${Math.floor(me.st.m / 2)}) ต้องได้ ≥ ${need}${full ? ' (ที่นั่งเต็ม)' : ''}<br>โอกาสสำเร็จ ≈ <b>${Math.round(binomAtLeast(dice, need) * 100)}%</b> <span class="text-gray-400">(ยังไม่รวมวิ่งเต้นและเงินเสริม)</span><br>เงินเดือนยุคหน้า: <b>${SAL[me.rank - 1]}</b> · ช่องคำสั่ง: <b>${SLOTS[me.rank - 1]}</b></div>`;
-  }
-  return h + chart(g) + '</div>';
-}
-function chart(g) {
-  const H = g.hist; if (!H || !H.length) return `<div class="bg-gray-800 p-3 rounded text-xs text-gray-400">📈 กราฟยศรายยุคจะขึ้นหลังจบยุคแรก</div>`;
-  const W = 300, Ht = 110, x = e => 20 + (e - 1) * 270 / 6, y = r => 100 - (r - 1) * 80 / 4;
-  const lines = g.players.map((p, i) => { const pts = H.map(h => { const q = h.p.find(z => z.id === p.id); return q ? `${x(h.era)},${y(q.r) + i * 1.5}` : null; }).filter(Boolean).join(' '); return `<polyline fill="none" stroke="${COLORS[i % 6]}" stroke-width="2" points="${pts}"/>`; }).join('');
-  return `<div class="bg-gray-800 p-3 rounded text-xs"><div class="font-bold text-amber-300 text-sm mb-1">📈 ยศรายยุค</div><svg viewBox="0 0 ${W} ${Ht}" class="w-full">${[1,2,3,4,5].map(r => `<text x="2" y="${y(r) + 3}" fill="#6b7280" font-size="8">${RANK[r - 1]}</text><line x1="16" x2="${W}" y1="${y(r)}" y2="${y(r)}" stroke="#374151" stroke-width=".5"/>`).join('')}${lines}</svg>
-  <div class="flex flex-wrap gap-2">${g.players.map((p, i) => `<span style="color:${COLORS[i % 6]}">● ${esc(p.name)}</span>`).join('')}</div></div>`;
-}
-const optLabel = (type, v) => ((OPTS[type] || []).find(o => o[0] === v) || [0, ''])[1];
-const orderLabel = x => `${TYPES[x.type] || x.type}${x.target ? ' → ' + esc(nameOf(x.target) || '?') : ''}${x.opt ? ' (' + optLabel(x.type, x.opt) + ')' : ''}${x.type === 'kidnap' && x.ransom ? ' ค่าไถ่ ' + x.ransom : ''}`;
-function windowPanel(g, me) {
-  let h = `<div class="bg-gray-800 border border-amber-500 p-3 rounded mb-3"><b class="text-amber-300">🔓 เปิดคำสั่งแล้ว · หน้าต่างความลับ</b> <span class="text-xs text-gray-400">รอ: ${esc(S.waiting.join(', ') || '—')}</span>
-  <table class="w-full text-xs mt-2">${(g.orders || []).map(o => `<tr class="border-t border-gray-700"><td class="pr-2 py-1 text-amber-200 whitespace-nowrap">${esc(nameOf(o.pid) || '')}</td><td>${o.list.map(orderLabel).join(' · ') || '—'}</td></tr>`).join('')}</table>`;
-  if (!me.ready && me.secrets && me.secrets.length && !g.usedSec) {
-    h += `<div class="mt-2 font-bold text-sm">ใช้การ์ดความลับ (1 ใบ/ยุค ใช้สำเร็จ = เต๋าเสริม +1 ตอนขอเลื่อนยศ)</div><div class="text-xs text-gray-400">รีดไถ = เป้าหมายจ่าย 2×ค่า หรือเสียบารมีเท่าค่า · เปิดโปง = เป้าหมายเสียบารมีเท่าค่า ไม่สงบ +1 คุณได้บารมี +1 · ปิดปาก = ยกเลิกโทเคน 1 อันของเป้าหมาย · บีบบังคับ = เป้าหมายต้องวิ่งเต้นสนับสนุนคุณ (ถ้ายังไม่ได้วางวิ่งเต้น)</div>`;
-    h += me.secrets.map((c, i) => {
-      const tl = ((g.orders || []).find(o => o.pid === c.about) || { list: [] }).list;
-      return `<div class="flex flex-wrap gap-2 items-center text-xs mt-1">${c.child ? '👶 ลูกลับ (นับเป็นค่า 3)' : 'ค่า ' + c.v} เกี่ยวกับ ${esc(nameOf(c.about) || '?')}
-      <select id="sm${i}" class="bg-gray-700 p-1"><option value="extort">รีดไถ</option><option value="expose">เปิดโปง</option><option value="hush">ปิดปาก</option><option value="force">บีบบังคับ</option></select>
-      <select id="tk${i}" class="bg-gray-700 p-1">${tl.map((x, k) => `<option value="${k}">ปิดปาก: ${esc(TYPES[x.type] || x.type)}</option>`).join('')}</select>${btn('bg-red-700 text-xs', 'ใช้', `useSecret(${i})`)}</div>`;
-    }).join('');
-  }
-  h += me.ready ? `<div class="text-xs text-gray-400 mt-2">คุณพร้อมแล้ว รอคนอื่น…</div>` : `<div class="mt-2">${btn('bg-amber-500 text-gray-900', '✔ พร้อม — เริ่มแก้ผล', 'ready()')}</div>`;
-  return h + '</div>';
-}
-function updateSide(g, me) {
-  const el = $('side'); if (!el) return;
+
+// ---------- แผงการกระทำ ----------
+const segBtns = (list, cur, mk) => `<div class="seg">${list.map(([v, l, dis]) => `<button class="${String(cur) === String(v) ? 'on' : ''}" ${dis ? 'disabled' : ''} onclick="${mk(v)}">${l}</button>`).join('')}</div>`;
+function actionsPanel(g, me) {
   let h = '';
+  if (g.phase === 'orders' && me.court) {
+    const c = COURT[me.court] || ['', ''];
+    h += section('🎭 การ์ดราชสำนัก: ' + esc(me.court), `<div class="grid sm:grid-cols-2 gap-3">${['A', 'B'].map((k, i) => `<button class="otype" style="align-items:flex-start;text-align:left;padding:.8rem;gap:.3rem" onclick="court('${k}')"><b class="text-gold text-base">ตัวเลือก ${k}</b><span class="font-normal text-sm" style="color:var(--ivory)">${c[i]}</span></button>`).join('')}</div>`, 'card-hl');
+  }
   const acts = [];
-  if (me.capt && g.phase !== 'resolve' && g.phase !== 'over') acts.push(btn('bg-red-700 text-xs', `⛓️ ไถ่ทายาท (ค่าไถ่ ${me.capt.ransom})`, 'ransom()'));
-  if (me.holding && g.phase !== 'resolve' && g.phase !== 'over') acts.push(btn('bg-gray-600 text-xs', `🕊️ ปล่อยตัวทายาทของ ${esc(nameOf(me.holding.owner) || '')}`, 'releaseHostage()'));
-  if (g.feast && g.phase === 'orders') acts.push(btn('bg-yellow-700 text-xs', '🎉 งานเลี้ยงหลวง: จ่าย 2 แลกบารมี 1', 'feast()'));
-  if (acts.length) h += `<div class="bg-gray-800 p-2 rounded mb-3 flex flex-wrap gap-2">${acts.join('')}</div>`;
+  if (me.capt && g.phase !== 'resolve') acts.push(btn('btn-red btn-sm', `⛓️ ไถ่ทายาท (ค่าไถ่ ${me.capt.ransom})`, 'ransom()'));
+  if (me.holding && g.phase !== 'resolve') acts.push(btn('btn-sm', `🕊️ ปล่อยตัวทายาทของ ${esc(nameOf(me.holding.owner) || '')}`, 'releaseHostage()'));
+  if (g.feast && g.phase === 'orders') acts.push(btn('btn-sm', '🎉 งานเลี้ยงหลวง: จ่าย 2 แลกบารมี 1', 'feast()'));
+  if (acts.length) h += `<div class="card p-3 flex flex-wrap gap-2">${acts.join('')}</div>`;
   if (g.phase === 'orders') {
-    if (me.court) h += `<div class="bg-purple-900/60 p-3 rounded mb-3"><b>การ์ดราชสำนัก: ${esc(me.court)}</b><div class="text-xs my-1">${COURT[me.court] || ''}</div>${btn('bg-purple-600', 'เลือก A', "court('A')")} ${btn('bg-gray-600', 'เลือก B', "court('B')")}</div>`;
-    h += `<div class="bg-gray-800 p-2 rounded mb-3 text-xs flex flex-wrap gap-4 items-center">ตั้งค่า: จ่ายเต๋าป้องกันเมื่อถูกโจมตี <select id="dp" onchange="sendOpts()" class="bg-gray-700"><option>0</option><option>1</option><option>2</option></select> ติดสินบนลดไม่สงบปลายยุค <select id="br" onchange="sendOpts()" class="bg-gray-700"><option>0</option><option>1</option><option>2</option></select> <label><input type="checkbox" id="rc" onchange="sendOpts()"> ปฏิเสธลูกลับอัตโนมัติ (จ่าย 3 ถ้ามีเงิน)</label> <span class="text-gray-400">(หน่วยเป็นเงิน)</span></div>`;
-    if (me.placed) h += `<div class="bg-gray-800 p-3 rounded mb-3 text-sm">วางคำสั่งแล้ว รอ: ${esc(S.waiting.join(', ') || '—')}</div>`;
+    h += section('⚙️ นโยบายอัตโนมัติ', `<div class="grid sm:grid-cols-3 gap-3 text-xs">
+     <div><div class="text-mute mb-1">${tip('จ่ายเงินเสริมเต๋าป้องกันทุกครั้งที่ถูกโจมตี (หน่วย: เงิน)', 'เต๋าป้องกัน')}</div>${segBtns([[0, '0'], [1, '1'], [2, '2']], OPT.dp, v => `setOpt('dp',${v})`)}</div>
+     <div><div class="text-mute mb-1">${tip('ติดสินบนลดความไม่สงบปลายยุค (เงิน 1 = ลด 1)', 'ติดสินบน')}</div>${segBtns([[0, '0'], [1, '1'], [2, '2']], OPT.br, v => `setOpt('br',${v})`)}</div>
+     <div><div class="text-mute mb-1">${tip('ถ้ามีลูกลับมาอ้างสิทธิ์ จ่าย 3 เพื่อปฏิเสธอัตโนมัติ', 'ลูกลับ')}</div>${segBtns([[false, 'ไม่ปฏิเสธ'], [true, 'ปฏิเสธ']], OPT.rc, v => `setOpt('rc',${v})`)}</div></div>`);
   }
-  if (g.phase === 'window' && !S.replay) h += windowPanel(g, me);
-  if (g.phase === 'between') h += `<div class="bg-gray-800 p-3 rounded mb-3 text-sm">กำลังเริ่มยุคถัดไป…</div>`;
-  if (el.dataset.h !== h) {
-    el.innerHTML = h; el.dataset.h = h;
-    if ($('dp')) { $('dp').value = OPT.dp; $('br').value = OPT.br; $('rc').checked = OPT.rc; }
+  return h;
+}
+function windowPanel(g, me) {
+  const rows = (g.orders || []).map(o => `<div class="flex items-start gap-3 py-2" style="border-top:1px solid var(--line)">${av(o.pid, nameOf(o.pid), 28)}<div class="flex-1 min-w-0"><div class="text-xs text-mute">${esc(nameOf(o.pid) || '')}</div><div class="flex flex-wrap gap-1 mt-1">${o.list.map(x => `<span class="badge">${orderLabel(x)}</span>`).join('') || '<span class="text-xs text-mute">—</span>'}</div></div></div>`).join('');
+  let sec = '';
+  if (!me.ready && me.secrets && me.secrets.length && !g.usedSec) {
+    sec = `<div class="mt-3"><div class="sec-title mb-1">🤫 การ์ดความลับของคุณ</div><div class="text-xs text-mute mb-2">ใช้ได้ 1 ใบ/ยุค · ใช้แล้วได้เต๋าเสริม +1 ตอนขอเลื่อนยศ</div><div class="space-y-3">${me.secrets.map((c, i) => {
+      const s = secSel[i] || { mode: 'extort', tok: 0 }, tl = ((g.orders || []).find(o => o.pid === c.about) || { list: [] }).list;
+      return `<div class="p-3 rounded-xl" style="background:rgba(0,0,0,.25);border:1px solid var(--line)"><div class="text-sm flex items-center gap-2 mb-2">${c.child ? '👶 <b>ลูกลับ</b> (นับเป็นค่า 3)' : `🤫 <b>ค่า ${c.v}</b>`} เกี่ยวกับ ${av(c.about, nameOf(c.about), 22)} ${esc(nameOf(c.about) || '?')}</div>
+      ${segBtns([['extort', '💰 รีดไถ'], ['expose', '📢 เปิดโปง'], ['hush', '🤐 ปิดปาก'], ['force', '🔨 บีบบังคับ']], s.mode, v => `pickSec(${i},'mode','${v}')`)}
+      <div class="text-xs text-mute mt-2">${{ extort: 'เป้าหมายจ่าย 2×ค่า หรือเสียบารมีเท่าค่า', expose: 'เป้าหมายเสียบารมีเท่าค่า ไม่สงบ +1 คุณได้บารมี +1', hush: 'ยกเลิกโทเคนของเป้าหมาย 1 อัน (เลือกด้านล่าง)', force: 'เป้าหมายต้องวิ่งเต้นสนับสนุนคุณ (ถ้ายังไม่ได้วางวิ่งเต้น)' }[s.mode]}</div>
+      ${s.mode === 'hush' ? `<div class="mt-2">${segBtns(tl.map((x, k) => [k, (OT[x.type] || ['', x.type])[0] + ' ' + (OT[x.type] || ['', x.type])[1]]), s.tok, v => `pickSec(${i},'tok',${v})`)}</div>` : ''}
+      <div class="mt-3">${btn('btn-red btn-sm', 'ใช้การ์ดนี้', `useSecret(${i},'${s.mode}',${s.tok});secSel={}`)}</div></div>`;
+    }).join('')}</div></div>`;
   }
+  return section(`🔓 เปิดคำสั่งแล้ว · หน้าต่างความลับ <span class="text-mute normal-case font-normal">รอ: ${esc(S.waiting.join(', ') || '—')}</span>`, rows + sec + `<div class="mt-4">${me.ready ? '<div class="text-sm text-mute">✔ คุณพร้อมแล้ว รอคนอื่น…</div>' : btn('btn-gold', '✔ พร้อม — เริ่มแก้ผล', 'ready()')}</div>`, 'card-hl');
 }
-function buildForm(g, me) {
-  const slots = SLOTS[me.rank - 1], o = $('orders'); if (!slots) return;
-  o.innerHTML = `<div class="bg-gray-800 p-3 rounded mb-3"><b class="text-amber-300">วางคำสั่งลับ (${slots} ช่อง ห้ามซ้ำชนิด) · ลอบสังหารเสีย ${g.assCost} เงิน</b><div id="rows"></div>${btn('bg-amber-600 mt-2', 'ยืนยันคำสั่ง', 'sendOrders()')}</div>`;
-  for (let i = 0; i < slots; i++) { const d = document.createElement('div'); d.id = 'r' + i; d.className = 'flex flex-wrap gap-2 items-center mt-2 text-xs'; $('rows').appendChild(d); fillRow(i, g, me, i === 0 ? 'petition' : 'guard'); }
+
+// ---------- ตัววางคำสั่ง ----------
+const targetsFor = (t, me, g) => g.players.filter(p => t === 'lobby' || p.id !== me.id);
+function defaultOpt(t, me) { if (t === 'family') { if (me.lead.regent && !me.heir && !me.capt) return 'adopt'; if (!me.wife) return 'marry'; if (!me.heir) return 'breed'; return 'train'; } return OPTS[t] ? OPTS[t][0][0] : null; }
+function newSlot(t, g, me) {
+  const s = { type: t, opt: defaultOpt(t, me), target: null, pay: 0, wife: 0, stat: 'i', ransom: 2, pick: 'secret', victim: '' };
+  if (NEEDT.includes(t)) { const c = targetsFor(t, me, g); s.target = c[0] ? c[0].id : null; }
+  return s;
 }
-function fillRow(i, g, me, type) {
-  const d = $('r' + i), sel = (id, arr, v) => `<select id="${id}${i}" class="bg-gray-700 p-1">${arr.map(([k, l]) => `<option value="${k}" ${k == v ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
-  const reAt = `fillRow(${i},S.game,S.game.players.find(p=>p.id===S.me),`;
-  let h = `<select id="t${i}" onchange="${reAt}this.value)" class="bg-gray-700 p-1">${Object.entries(TYPES).map(([k, l]) => `<option value="${k}" ${k === type ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
-  if (NEEDT.includes(type)) h += sel('tg', g.players.filter(p => type === 'lobby' || p.id !== me.id).map(p => [p.id, p.name]));
-  if (OPTS[type]) h += `<select id="o${i}" ${type === 'intrigue' ? `onchange="pickExtra(${i})"` : ''} class="bg-gray-700 p-1">${OPTS[type].map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select>`;
-  if (type === 'family') h += `<span id="fx${i}"></span>`;
-  if (type === 'intrigue') h += `<span id="px${i}"></span>`;
-  if (type === 'kidnap') h += `ค่าไถ่ ` + sel('rs', [[1, 1], [2, 2], [3, 3], [4, 4]], 2);
-  if (type === 'petition') { const vs = g.players.filter(p => p.rank === me.rank + 1 && p.id !== me.id && me.rank + 1 < 5); if (vs.length) h += `ถ้าที่นั่งเต็ม ลดยศ ` + sel('vc', [['', 'อัตโนมัติ (บารมีน้อยสุด)'], ...vs.map(p => [p.id, p.name])]); }
-  if (NEEDPAY.includes(type)) h += `จ่ายเสริมเต๋า ` + sel('p', [[0, 0], [1, 1], [2, 2]], 0);
-  h += `<div class="w-full text-gray-400">${DESC[type]}</div>`;
-  d.innerHTML = h;
-  if (type === 'family') { $('o' + i).onchange = () => famExtra(i, g); famExtra(i, g); }
-  if (type === 'intrigue') pickExtra(i);
+function ensureForm(g, me) {
+  const n = SLOTS[me.rank - 1];
+  if (!n || g.phase !== 'orders' || me.placed) { return; }
+  if (!form || form.era !== g.era || form.slots.length !== n) form = { era: g.era, slots: ['petition', 'guard', 'decoy'].slice(0, n).map(t => newSlot(t, g, me)) };
 }
-function pickExtra(i) {
-  const v = $('o' + i).value, el = $('px' + i);
-  const L = v === 'tryst' ? [['secret', 'ได้ความลับค่า 3'], ['child', 'ได้ลูกลับ']] : [['secret', 'ได้ความลับค่า 1'], ['destroy', 'ทำลายความลับที่เขาถือเกี่ยวกับฉัน'], ['release', 'ชิงทายาทฉันคืน']];
-  el.innerHTML = `<select id="pk${i}" class="bg-gray-700 p-1">${L.map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select>`;
+function setType(i, t) { form.slots[i] = newSlot(t, S.game, pl(S.me)); render(); }
+function setSlot(i, k, v) { form.slots[i][k] = v; if (k === 'opt' && form.slots[i].type === 'intrigue') form.slots[i].pick = 'secret'; render(); }
+const sl = (i, k) => v => `setSlot(${i},'${k}',${typeof v === 'number' ? v : "'" + v + "'"})`;
+function slotCost(s, g) {
+  let c = NEEDPAY.includes(s.type) ? s.pay : 0;
+  if (s.type === 'assassinate') c += g.assCost;
+  if (s.type === 'family' && s.opt === 'adopt') c += 4;
+  if (s.type === 'family' && s.opt === 'marry' && g.market[s.wife]) c += g.market[s.wife].price;
+  if (s.type === 'realm' && s.opt === 'recruit') c += 2;
+  return c;
 }
-function famExtra(i, g) {
-  const v = $('o' + i).value, el = $('fx' + i);
-  el.innerHTML = v === 'marry' ? `<select id="w${i}" class="bg-gray-700 p-1">${g.market.map((w, k) => `<option value="${k}">${w.name} $${w.price} (${w.s === 'i' ? 'บารมี' : w.s === 'n' ? 'เล่ห์' : 'รบ'}+${w.v}, ลูก ${w.fert})</option>`).join('')}</select>` : v === 'train' ? `<select id="s${i}" class="bg-gray-700 p-1"><option value="i">บารมี</option><option value="n">เล่ห์เหลี่ยม</option><option value="m">กำลังรบ</option></select>` : '';
+const row = (label, html) => `<div class="mt-3"><div class="text-[11px] text-mute mb-1">${label}</div>${html}</div>`;
+function slotCard(i, s, g, me) {
+  const chips = Object.keys(OT).map(t => { const dis = form.slots.some((x, j) => j !== i && x.type === t); return `<button class="otype ${s.type === t ? 'on' : ''}" ${dis ? 'disabled title="ใช้ในช่องอื่นแล้ว"' : ''} onclick="setType(${i},'${t}')"><span class="ic">${OT[t][0]}</span>${OT[t][1]}</button>`; }).join('');
+  let p = '';
+  if (NEEDT.includes(s.type)) p += row('เป้าหมาย', segBtns(targetsFor(s.type, me, g).map(q => [q.id, `<span style="color:${colorOf(q.id)}">●</span> ${esc(q.name)}${q.id === me.id ? ' (ฉัน)' : ''}`]), s.target, sl(i, 'target')));
+  if (OPTS[s.type]) {
+    const list = OPTS[s.type].map(([v, l]) => [v, l, s.type === 'family' && ((v === 'breed' && !me.wife) || (v === 'train' && !me.heir) || (v === 'adopt' && (me.heir || me.capt)) || (v === 'marry' && (me.wife || !g.market.length)))]);
+    p += row('ทางเลือก', segBtns(list, s.opt, sl(i, 'opt')));
+  }
+  if (s.type === 'family' && s.opt === 'marry' && g.market.length) p += row('เลือกภรรยาจากตลาด', segBtns(g.market.map((w, k) => [k, `${esc(w.name)} · 💰${w.price} · ${{ i: 'บารมี', n: 'เล่ห์', m: 'รบ' }[w.s]}+${w.v} · ลูก${w.fert}${w.fx ? ' ✦' : ''}`]), s.wife, sl(i, 'wife')));
+  if (s.type === 'family' && s.opt === 'train') p += row('ฝึกค่าของทายาท', segBtns([['i', 'บารมี'], ['n', 'เล่ห์เหลี่ยม'], ['m', 'กำลังรบ']], s.stat, sl(i, 'stat')));
+  if (s.type === 'intrigue') p += row('ถ้าสำเร็จ', segBtns((s.opt === 'tryst' ? [['secret', 'ความลับค่า 3'], ['child', 'ลูกลับ 👶']] : [['secret', 'ความลับค่า 1'], ['destroy', 'ทำลายความลับของฉัน'], ['release', 'ชิงทายาทคืน']]), s.pick, sl(i, 'pick')));
+  if (s.type === 'kidnap') p += row('ค่าไถ่ที่ประกาศ (เงิน)', segBtns([[1, '1'], [2, '2'], [3, '3'], [4, '4']], s.ransom, sl(i, 'ransom')));
+  if (s.type === 'petition') { const vs = g.players.filter(q => q.rank === me.rank + 1 && q.id !== me.id && me.rank + 1 < 5); if (vs.length) p += row('ถ้าที่นั่งเต็ม ให้ใครถูกลดยศ', segBtns([['', 'อัตโนมัติ'], ...vs.map(q => [q.id, esc(q.name)])], s.victim, sl(i, 'victim'))); }
+  if (NEEDPAY.includes(s.type)) p += row(tip('เงิน 1 = เต๋า +1 สูงสุด +2 ต่อการทอย จ่ายแล้วไม่คืน', '💰 เงินเสริมเต๋า'), segBtns([[0, '0'], [1, '1'], [2, '2']], s.pay, sl(i, 'pay')));
+  return `<div class="p-4 rounded-2xl" style="background:rgba(0,0,0,.22);border:1px solid var(--line)"><div class="flex justify-between items-center mb-2"><b class="text-gold text-sm">ช่องที่ ${i + 1}</b><span class="badge">ใช้เงิน ≈ ${slotCost(s, g)}</span></div>
+  <div class="grid grid-cols-3 sm:grid-cols-5 gap-2">${chips}</div><div class="text-xs text-mute mt-3 leading-relaxed">${DESC[s.type]}</div>${p}</div>`;
+}
+function builder(g, me) {
+  if (g.phase !== 'orders' || me.placed || !form) return '';
+  const total = form.slots.reduce((a, s) => a + slotCost(s, g), 0), over = total > me.money;
+  return `<div class="card card-hl p-4 fade-in"><div class="sec-title mb-3">✍️ วางคำสั่งลับ · ${form.slots.length} ช่อง (ห้ามซ้ำชนิด)</div><div class="space-y-3">${form.slots.map((s, i) => slotCard(i, s, g, me)).join('')}</div>
+  <div class="sticky-bar flex items-center justify-between gap-3 flex-wrap"><div class="text-sm">💰 ประมาณการใช้ <b class="${over ? 'text-red-300' : 'text-gold'}">${total}</b> / มี ${me.money} ${over ? '<span class="badge bad">เงินอาจไม่พอ — บางคำสั่งจะไม่มีผล</span>' : ''}</div>${btn('btn-gold btn-lg', '✔ ยืนยันคำสั่ง', 'sendOrders()')}</div></div>`;
 }
 function sendOrders() {
-  const me = S.game.players.find(p => p.id === S.me), slots = SLOTS[me.rank - 1], out = [];
-  for (let i = 0; i < slots; i++) {
-    const type = $('t' + i).value;
-    out.push({ type, target: $('tg' + i) && $('tg' + i).value, opt: $('o' + i) && $('o' + i).value, pay: $('p' + i) ? +$('p' + i).value : 0, wife: $('w' + i) ? +$('w' + i).value : 0, stat: $('s' + i) && $('s' + i).value, ransom: $('rs' + i) ? +$('rs' + i).value : undefined, pick: $('pk' + i) && $('pk' + i).value, victim: $('vc' + i) && $('vc' + i).value || undefined });
+  const orders = form.slots.map(s => ({ type: s.type, target: NEEDT.includes(s.type) ? s.target : undefined, opt: OPTS[s.type] ? s.opt : undefined, pay: NEEDPAY.includes(s.type) ? s.pay : 0, wife: s.wife, stat: s.stat, ransom: s.type === 'kidnap' ? s.ransom : undefined, pick: s.type === 'intrigue' ? s.pick : undefined, victim: s.type === 'petition' && s.victim ? s.victim : undefined }));
+  socket.emit('submit', { code, orders });
+}
+function placedPanel(g, me) {
+  if (g.phase !== 'orders' || !me.placed) return '';
+  return section('✅ คำสั่งที่คุณวางไว้', `<div class="flex flex-wrap gap-2">${me.placed.map(x => `<span class="badge">${orderLabel(x)}</span>`).join('')}</div><div class="text-xs text-mute mt-2">รอผู้เล่นคนอื่นวางคำสั่งให้ครบ แล้วจะเปิดพร้อมกัน</div>`);
+}
+
+// ---------- การ์ดราชวงศ์ ----------
+function statBox(k, ico, name, p) {
+  return `<div class="stat"><div class="text-[10px] text-mute">${tip(T[k], ico + ' ' + name)}</div><div class="flex items-baseline gap-1"><span class="n">${p.st[k]}</span>${p.hb && p.hb[k] ? `<span class="badge gold" title="โบนัสเต๋าจากทายาท">+1🎲</span>` : ''}</div>
+  <div class="pips mt-1" style="--c:${STATC[k]}">${[1,2,3,4,5,6].map(i => `<i class="${i <= p.st[k] ? 'on' : ''}"></i>`).join('')}</div></div>`;
+}
+const STN = { i: 'บารมี', n: 'เล่ห์', m: 'รบ' };
+function dynCard(p, me) {
+  const mine = p.id === me.id, l = p.lead, hi = mine && p.heir;
+  const sec = mine && p.secrets && p.secrets.length ? p.secrets.map(c => `<span class="badge">${c.child ? '👶' : '🤫'}${c.child ? '' : c.v} → ${esc(nameOf(c.about) || '?')}</span>`).join(' ') : p.secretAbout.map(a => `<span class="badge">🤫 → ${esc(nameOf(a) || '?')}</span>`).join(' ');
+  return `<div class="card p-4 ${mine ? 'card-me' : ''} fade-in">
+  <div class="flex items-center gap-3">${av(p.id, p.name, 46)}<div class="min-w-0 flex-1"><div class="flex items-center gap-2 flex-wrap"><b class="truncate">${esc(p.name)}</b>${mine ? '<span class="badge gold">คุณ</span>' : ''}${p.seal ? `<span class="badge">${tip(T.seal, '🔰 ตราประทับ')}</span>` : ''}${p.bot ? `<span class="badge">🤖 ${esc(p.style)}</span>` : ''}</div>
+   <div class="text-xs text-mute flex items-center mt-1">${tip(T.rank, 'ยศ ' + RANK[p.rank - 1])} <span class="ml-2">${rankPips(p.rank)}</span></div></div>
+   <div class="text-right"><div class="text-[10px] text-mute">${tip(T.score, '🏅 คะแนน')}</div><div class="text-2xl font-bold text-gold leading-none">${p.score}</div></div></div>
+  <div class="text-xs flex flex-wrap items-center gap-1 mt-3"><span>${l.regent ? '👤' : '👑'}</span><b>${esc(l.name)}</b>${l.regent ? `<span class="badge warn">${tip(T.regent, 'ผู้สำเร็จราชการ')}</span>` : ''}<span class="badge">${tip(T.age, 'วัย ' + l.age)}</span></div>
+  <div class="grid grid-cols-3 gap-2 mt-3">${statBox('i', '✨', 'บารมี', p)}${statBox('n', '🕵️', 'เล่ห์เหลี่ยม', p)}${statBox('m', '⚔️', 'กำลังรบ', p)}</div>
+  <div class="grid grid-cols-3 gap-2 mt-2 text-center">
+   <div class="stat"><div class="text-[10px] text-mute">${tip(T.gold, '💰 เงิน')}</div><div class="n text-gold">${p.money}</div></div>
+   <div class="stat"><div class="text-[10px] text-mute">${tip(T.inf, '👑 บารมีสะสม')}</div><div class="n">${p.inf}</div></div>
+   <div class="stat"><div class="text-[10px] text-mute">${mine ? tip(T.sol, '🪖 ทหาร') : tip(T.tok, '▮ โทเคนคว่ำ')}</div><div class="n">${mine ? p.soldiers : p.tokensPlaced}</div></div></div>
+  <div class="mt-3"><div class="text-[10px] text-mute mb-1 flex justify-between">${tip(T.unrest, '🔥 ความไม่สงบ')}<span>${p.unrest}/6</span></div>${meter(p.unrest)}</div>
+  <div class="mt-3 text-xs space-y-1">
+   <div>${tip(T.wife, '💍 ภรรยา')}: ${p.wife ? `<b>${esc(p.wife.name)}</b> <span class="text-mute">(${STN[p.wife.s]}+${p.wife.v})</span>` : '<span class="text-mute">—</span>'}</div>
+   <div>${tip(T.heir, '🍼 ทายาท')}: ${hi ? `<b>${esc(p.heir.name)}</b> <span class="text-mute">${p.heir.b.i + p.heir.t.i}/${p.heir.b.n + p.heir.t.n}/${p.heir.b.m + p.heir.t.m}</span>${p.spare ? ` · สำรอง <b>${esc(p.spare.name)}</b>` : ''}` : p.heirKnown ? '<span class="badge ok">มีทายาท</span>' : '<span class="text-mute">ไม่มี</span>'}</div>
+   ${p.capt ? `<div>${tip(T.capt, '⛓️ ทายาทถูกกัก')} <span class="badge bad">ค่าไถ่ ${p.capt.ransom}</span></div>` : ''}${p.holding ? `<div>⛓️ กักทายาทของ <b>${esc(nameOf(p.holding.owner) || '')}</b> <span class="badge warn">ค่าไถ่ ${p.holding.ransom}</span></div>` : ''}
+   <div>${tip(T.sec, '🤫 ความลับ')}: ${sec || '<span class="text-mute">—</span>'}</div></div></div>`;
+}
+
+// ---------- แดชบอร์ด ----------
+function binom(n, k) { if (k <= 0) return 1; if (k > n) return 0; let s = 0, c = 1; for (let i = 0; i <= n; i++) { if (i >= k) s += c; c = c * (n - i) / (i + 1); } return s / Math.pow(2, n); }
+function leaderboard(g, me) {
+  const rows = [...g.players].sort((a, b) => b.rank - a.rank || b.score - a.score || b.inf - a.inf || b.money - a.money);
+  return section('📊 อันดับ', `<div class="space-y-2">${rows.map((p, i) => `<div class="flex items-center gap-2 p-2 rounded-xl ${p.id === me.id ? 'card-me' : ''}" style="background:rgba(0,0,0,.2)"><div class="w-5 text-center text-mute text-xs">${i + 1}</div>${av(p.id, p.name, 28)}<div class="flex-1 min-w-0"><div class="text-sm font-semibold truncate">${esc(p.name)}</div><div class="flex items-center">${rankPips(p.rank)}</div></div><div class="text-right text-xs"><div class="text-gold font-bold">🏅 ${p.score}</div><div class="text-mute">👑${p.inf} · 💰${p.money}</div></div><div class="w-14">${meter(p.unrest)}</div></div>`).join('')}</div><div class="text-[11px] text-mute mt-2">เรียงตามยศ → คะแนน → บารมี → เงิน · แถบขวา = ความไม่สงบ</div>`);
+}
+function seatsOdds(g, me) {
+  const n = g.players.length;
+  let h = `<div class="space-y-2 text-xs">${[3, 4, 5].map(r => { const hs = g.players.filter(p => p.rank === r), cap = seatCap(r, n); return `<div class="flex items-center gap-2"><span class="badge ${hs.length >= cap ? 'bad' : 'ok'}">ยศ ${RANK[r - 1]} ${hs.length}/${cap}</span><span class="text-mute">${hs.map(p => esc(p.name)).join(', ') || 'ว่าง'}</span></div>`; }).join('')}</div><div class="text-[11px] text-mute mt-2">ที่นั่งเต็ม = ขอเลื่อนยศยากขึ้น +1 และคุณเลือกคนที่ถูกลดยศ</div>`;
+  if (me.rank < 5) {
+    const dice = Math.min(10, me.st.i + (me.hb ? me.hb.i : 0) + Math.min(2, me.soldiers || 0) + Math.floor(me.st.m / 2)), full = g.players.filter(p => p.rank === me.rank + 1).length >= seatCap(me.rank + 1, n), need = TH[me.rank - 1] + (full ? 1 : 0), pr = Math.round(binom(dice, need) * 100);
+    h += `<div class="mt-3 p-3 rounded-xl" style="background:rgba(0,0,0,.25);border:1px solid var(--line)"><div class="flex justify-between items-end"><div><div class="text-[11px] text-mute">โอกาสขอเลื่อนยศของคุณ</div><div class="text-3xl font-bold text-gold leading-none">${pr}%</div></div><div class="text-right text-[11px] text-mute">เต๋า ${dice} ลูก · ต้องได้ ≥ ${need}${full ? ' (ที่นั่งเต็ม)' : ''}</div></div>
+    <div class="h-2 rounded mt-2" style="background:var(--s3)"><div class="h-2 rounded" style="width:${pr}%;background:linear-gradient(90deg,var(--gold2),var(--gold))"></div></div>
+    <div class="text-[11px] text-mute mt-2">บารมี ${me.st.i}${me.hb && me.hb.i ? ' + ทายาท 1' : ''} + ทหาร ${Math.min(2, me.soldiers || 0)} + รบ÷2 ${Math.floor(me.st.m / 2)} (ยังไม่รวมวิ่งเต้น/เงินเสริม/ความลับ) · เงินเดือนยุคหน้า <b>${SAL[me.rank - 1]}</b> · ช่องคำสั่ง <b>${SLOTS[me.rank - 1]}</b></div></div>`;
   }
-  if (new Set(out.map(o => o.type)).size < out.length) return alert('คำสั่งซ้ำชนิดกันไม่ได้');
-  socket.emit('submit', { code, orders: out });
+  return section('🪑 ที่นั่งและโอกาส', h);
+}
+function chart(g) {
+  const H = g.hist; if (!H || !H.length) return section('📈 ยศรายยุค', '<div class="text-xs text-mute">กราฟจะขึ้นหลังจบยุคแรก</div>');
+  const W = 300, Ht = 120, x = e => 24 + (e - 1) * 266 / 6, y = r => 108 - (r - 1) * 88 / 4;
+  const lines = g.players.map((p, i) => { const pts = H.map(h => { const q = h.p.find(z => z.id === p.id); return q ? `${x(h.era)},${y(q.r) + (i - 2) * 1.2}` : null; }).filter(Boolean); return `<polyline fill="none" stroke="${PCOL[i % 6]}" stroke-width="2.2" stroke-linejoin="round" points="${pts.join(' ')}"/>${pts.map(pt => `<circle cx="${pt.split(',')[0]}" cy="${pt.split(',')[1]}" r="2.6" fill="${PCOL[i % 6]}"/>`).join('')}`; }).join('');
+  return section('📈 ยศรายยุค', `<svg viewBox="0 0 ${W} ${Ht}" class="w-full">${[1,2,3,4,5].map(r => `<text x="4" y="${y(r) + 3}" fill="#8e84a6" font-size="8">${RANK[r - 1]}</text><line x1="20" x2="${W}" y1="${y(r)}" y2="${y(r)}" stroke="#3a2f52" stroke-width=".6"/>`).join('')}${[1,2,3,4,5,6,7].map(e => `<text x="${x(e) - 2}" y="118" fill="#8e84a6" font-size="7">${e}</text>`).join('')}${lines}</svg>
+  <div class="flex flex-wrap gap-2 text-xs mt-1">${g.players.map((p, i) => `<span style="color:${PCOL[i % 6]}">● ${esc(p.name)}</span>`).join('')}</div>`);
+}
+function logKind(l) {
+  if (l.includes('คะแนนราชวงศ์')) return ['gold', '🏅'];
+  if (/🎲/.test(l)) return ['roll', '🎲'];
+  if (/ตาย|แพ้กบฏ|ลอบสังหาร|ลักพาตัว|ถูกจับ|ลดยศ/.test(l)) return ['bad', '💀'];
+  if (/จักรพรรดิ|ผู้ชนะ|ปราบกบฏ|แต่งงาน|ขึ้นเป็น|รับบุตรบุญธรรม|ไถ่|หมดวาระ/.test(l)) return ['good', '✨'];
+  return ['', '•'];
+}
+function logPanel(g) {
+  return section('📜 บันทึกเหตุการณ์', `<div class="space-y-1 max-h-[340px] overflow-y-auto pr-1">${[...g.log].reverse().map(l => { const [k, ic] = logKind(l); return `<div class="logline ${k}"><span>${ic}</span><span>${esc(l)}</span></div>`; }).join('') || '<div class="text-xs text-mute">ยังไม่มีเหตุการณ์</div>'}</div>`);
+}
+
+// ---------- จบเกม / คู่มือ ----------
+function endPanel(g, me) {
+  if (g.phase !== 'over') return '';
+  const rows = [...g.players].sort((a, b) => b.rank - a.rank || b.score - a.score);
+  const lines = g.log.filter(l => l.includes('คะแนนราชวงศ์'));
+  const w = g.players.find(p => p.name === g.winner), emp = w && w.rank === 5;
+  return `<div class="card card-hl p-6 text-center fade-in"><div class="text-5xl mb-2">${emp ? '👑' : '🏆'}</div><div class="text-xs text-mute">${emp ? 'จักรพรรดิองค์ใหม่' : 'ผู้ชนะด้วยคะแนนราชวงศ์'}</div><div class="hero-title display" style="font-size:2.4rem">${esc(g.winner)}</div>
+  <div class="mt-4 space-y-2 text-left max-w-md mx-auto">${rows.map((p, i) => `<div class="flex items-center gap-2 p-2 rounded-xl" style="background:rgba(0,0,0,.25)"><span class="w-5 text-center text-mute text-xs">${i + 1}</span>${av(p.id, p.name, 28)}<b class="flex-1 truncate">${esc(p.name)}</b><span class="badge">ยศ ${RANK[p.rank - 1]}</span><span class="text-gold font-bold">🏅 ${p.score}</span></div>`).join('')}</div>
+  ${lines.length ? `<div class="mt-3 text-left max-w-md mx-auto space-y-1">${lines.map(l => `<div class="logline gold"><span>🏅</span><span>${esc(l)}</span></div>`).join('')}</div>` : ''}
+  <div class="mt-5 flex justify-center gap-2 flex-wrap">${S.host === S.me ? btn('btn-gold', '🔄 กลับล็อบบี้เล่นใหม่', 'rematch()') : '<span class="text-sm text-mute self-center">รอเจ้าของห้องเริ่มรอบใหม่</span>'}${btn('', 'ออก', 'leave()')}</div></div>`;
+}
+function helpModal() {
+  const tabs = [['stats', 'ค่าและตัวเลข'], ['orders', 'คำสั่ง'], ['dice', 'ลูกเต๋า'], ['flow', 'ลำดับยุค']];
+  let body = '';
+  if (helpTab === 'stats') body = Object.entries(T).map(([k, v]) => `<div class="text-sm py-2" style="border-top:1px solid var(--line)">${esc(v)}</div>`).join('');
+  if (helpTab === 'orders') body = Object.keys(OT).map(k => `<div class="py-2" style="border-top:1px solid var(--line)"><div class="font-semibold text-gold">${OT[k][0]} ${OT[k][1]}</div><div class="text-sm text-mute">${esc(DESC[k])}</div></div>`).join('');
+  if (helpTab === 'dice') body = `<div class="text-sm space-y-2"><p>ทอยลูกเต๋า d6 ตามจำนวนเต๋า ลูกที่ออก <b class="text-gold">4-6 = 1 ความสำเร็จ</b></p><p>ทอยแข่ง: ฝั่งโจมตีทอยเล่ห์เหลี่ยม ฝั่งป้องกันทอยกำลังรบ (+2 ถ้ามีป้องกัน) ฝั่งโจมตีต้องได้ <b>มากกว่า</b> เสมอ = ผู้ป้องกันชนะ</p><p>เงิน 1 = เต๋า +1 สูงสุด +2 ต่อฝ่ายต่อการทอย เต๋ารวมไม่เกิน 10 ลูก ถ้าเต๋าเหลือ 0 ล้มเหลวทันที</p><p>ในเกมนี้ ผู้เล่นเจ้าของการทอยต้องกดทอยเองทีละคน ผลสุ่มที่เซิร์ฟเวอร์</p></div>`;
+  if (helpTab === 'flow') body = `<ol class="text-sm space-y-2 list-decimal pl-5"><li>เหตุการณ์ประจำยุค และการ์ดราชสำนัก (เลือก A/B)</li><li>รับเงินเดือนตามยศ</li><li>วางคำสั่งลับพร้อมกัน</li><li>เปิดคำสั่งทุกโทเคน</li><li><b>หน้าต่างความลับ</b> ใช้การ์ดความลับได้ 1 ใบ</li><li>แก้ผลตามลำดับ 1 → 7 (เท่ากันดูตราประทับ) ผู้ทอยกดเต๋าทีละคน</li><li>ปลายยุค: ติดสินบนลดไม่สงบ ทอยความชรา (ตั้งแต่ยุค 4) ส่งตราประทับ</li></ol><p class="text-xs text-mute mt-3">ครบ 7 ยุคไม่มีจักรพรรดิ ตัดสินด้วยคะแนนราชวงศ์</p>`;
+  return `<div class="modal" onclick="if(event.target===this){helpOpen=false;render()}"><div class="card p-5 w-full max-w-2xl fade-in"><div class="flex justify-between items-center mb-3"><div class="display text-gold">📖 คู่มือย่อ</div>${btn('btn-sm btn-ghost', '✕ ปิด', 'helpOpen=false;render()')}</div><div class="mb-3">${segBtns(tabs, helpTab, v => `helpTab='${v}';render()`)}</div><div class="max-h-[60vh] overflow-y-auto pr-1">${body}</div></div></div>`;
+}
+
+// ---------- ประกอบหน้าเกม ----------
+function gameScreen() {
+  const g = S.game, me = g && pl(S.me);
+  if (!g || !me) return '<div class="card p-6 text-center">กำลังโหลด…</div>';
+  ensureForm(g, me);
+  const others = g.players.filter(p => p.id !== me.id);
+  const main = [endPanel(g, me), banner(g, me), diceStage(me), actionsPanel(g, me), g.phase === 'window' && !S.replay ? windowPanel(g, me) : '', builder(g, me), placedPanel(g, me), dynCard(me, me), others.length ? `<div class="sec-title mt-2">👥 ราชวงศ์คู่แข่ง</div><div class="grid sm:grid-cols-2 gap-4">${others.map(p => dynCard(p, me)).join('')}</div>` : ''];
+  return `${topbar(g)}${stepper(g, me)}<div class="grid lg:grid-cols-3 gap-4"><div class="lg:col-span-2 space-y-4 min-w-0">${main.join('')}</div><div class="space-y-4 min-w-0 lg:sticky lg:top-3 self-start">${leaderboard(g, me)}${seatsOdds(g, me)}${chart(g)}${logPanel(g)}</div></div>`;
 }
 render();
 </script>
