@@ -7,7 +7,7 @@ const { Game, STYLES } = require('./engine');
 const app = express();
 app.use(cors());
 app.use(express.static(require('path').join(__dirname, '../client')));
-app.get('/health', (_, res) => res.json({ ok: true, rulesVersion: '1.2' }));
+app.get('/health', (_, res) => res.json({ ok: true, rulesVersion: '1.3' }));
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*', methods: ['GET', 'POST'] } });
 
@@ -28,6 +28,11 @@ function nextEra(room) { if(!room.game || room.game.winner)return;room.game.star
 function pump(room) {
   const g=room.game;if(!g)return broadcast(room);
   clearTimeout(room.timer);room.timer=null;
+  if(g.phase==='leaders') {
+    g.chooseBotLeaders();
+    if(g.allLeadersChosen())g.startEra();
+    else return broadcast(room);
+  }
   // Advance only automatic transitions. Human decisions remain explicit.
   for(let i=0;i<200;i++) {
     if(g.winner)break;
@@ -92,8 +97,8 @@ io.on('connection', socket => {
     const { room, pid } = find(code, socket);
     if (!room || room.game || pid !== room.members[0].pid) return;
     if (room.members.length < 3) return socket.emit('err', 'ต้องมีอย่างน้อย 3 คน (เพิ่มบอทได้)');
-    room.game = new Game(room.members.map(m => ({ id: m.pid, name: m.name, bot: m.bot, style: m.style })));
-    nextEra(room);
+    room.game = new Game(room.members.map(m => ({ id: m.pid, name: m.name, bot: m.bot, style: m.style })),{draftLeaders:true});
+    pump(room);
   });
   socket.on('leaveRoom', code => {
     const { room, pid } = find(code, socket); if (!room || !pid) return;
@@ -116,6 +121,7 @@ io.on('connection', socket => {
     });
   }
   command('submit',(g,id,d)=>g.submit(id,d.orders));
+  command('chooseLeader',(g,id,d)=>g.chooseLeader(id,d.leaderId));
   command('ready',(g,id)=>g.setReady(id));
   command('action',(g,id,d)=>g.act(id,d.order));
   command('respond',(g,id,d)=>g.pending?.kind==='rebellion'?g.resolveRebellion(id,d):g.respond(id,d));

@@ -1,5 +1,5 @@
 'use strict';
-// Dynasty rules engine (rulebook v1.2). Pure logic: no network. Server calls it, client only renders view(pid).
+// Dynasty rules engine (rulebook v1.3). Pure logic: no network. Server calls it, client only renders view(pid).
 const R = n => Math.floor(Math.random() * n);
 const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = R(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const freshHeirs = () => shuffle(HEIRS.map(a => ({ ...mk(a), isHeir: true })));
@@ -27,21 +27,44 @@ const regent = () => ({ name: 'Regent', age: 1, regent: true, b: { i: 2, n: 2, m
 const EVENTS = ['drought', 'border', 'feast', 'plague'];
 
 class Game {
-  constructor(players, seed) {
+  constructor(players, options = {}) {
     if (!Array.isArray(players) || players.length < 3 || players.length > 6 || new Set(players.map(p => p.id)).size !== players.length) throw new Error('ต้องมีผู้เล่น 3–6 คนและรหัสไม่ซ้ำ');
     this.n = players.length; this.era = 0; this.hist = []; this.ev = []; this.rec = false; this.eventName = null; this.flags = {}; this.eventDeck = shuffle(EVENTS.flatMap(e => [e, e, e])); this.log = []; this.winner = null; this.phase = 'setup';
     const ls = shuffle(LEADERS.map(mk));
+    this.leaderChoices = LEADERS.map((card, i) => ({ id: `L${i+1}`, ...mk(card) }));
+    if (options.draftLeaders) this.phase = 'leaders';
     this.heirDeck = freshHeirs(); this.heirDisc = []; this.wifeDeck = shuffle(WIVES.map(w => ({ ...w })));
     this.pending = null; this.turnOrder = []; this.turnIndex = 0; this.favors = []; this.offers = []; this.nextOffer = 1;
     this.market = []; this.secretPool = [0,15,10,5];
     this.players = players.map((pl, i) => ({
-      id: pl.id, name: pl.name, bot: !!pl.bot, style: pl.style || STYLES[R(6)], lead: ls[i], heir: null, spare: null, capt: null, captive: null, ready: false, used: [], envelope: [], slots: 2, publicLeft: 2, kidnappedEra: -1,
+      id: pl.id, name: pl.name, bot: !!pl.bot, style: pl.style || STYLES[R(6)], lead: options.draftLeaders ? null : ls[i], heir: null, spare: null, capt: null, captive: null, ready: false, used: [], envelope: [], slots: 2, publicLeft: 2, kidnappedEra: -1, turnEndedEra: -1, favorDebt: 0,
       wife: null, rank: 1, money: 3, inf: 0, unrest: 1, soldiers: 0, secrets: [], placed: null, deadEra: -1,
       bonus: 0, lobby: 0, guard: false, usedSec: -1, bribe: 0, defPay: 0,
     }));
     this.refill();
   }
   P(id) { return this.players.find(p => p.id === id); }
+  chooseLeader(id, leaderId) {
+    const p = this.P(id), leader = this.leaderChoices.find(c => c.id === leaderId);
+    if (this.phase !== 'leaders' || !p || p.lead || !leader || this.players.some(q => q.lead?.id === leaderId)) return false;
+    p.lead = { ...leader, b: { ...leader.b }, t: { ...leader.t } };
+    this.say(`${p.name} เลือกผู้นำ ${leader.name}`); return true;
+  }
+  allLeadersChosen() { return this.players.every(p => p.lead); }
+  chooseBotLeaders() {
+    if (this.phase !== 'leaders' || this.players.some(p => !p.bot && !p.lead)) return false;
+    for (const p of this.players.filter(p => p.bot && !p.lead)) {
+      const available = this.leaderChoices.filter(c => !this.players.some(q => q.lead?.id === c.id));
+      const key = ['assassin','schemer'].includes(p.style) ? 'n' : p.style === 'warlord' || p.style === 'turtle' ? 'm' : 'i';
+      available.sort((a,b) => b.b[key]-a.b[key] || a.age-b.age);
+      this.chooseLeader(p.id, available[0].id);
+    }
+    return this.allLeadersChosen();
+  }
+  netInf(p) { return p.inf - p.favorDebt; }
+  gainInf(p,n) { const paid = Math.min(p.favorDebt,n); p.favorDebt -= paid; p.inf += n-paid; }
+  penalizeFavor(p) { const paid = Math.min(p.inf,2); p.inf -= paid; p.favorDebt += 2-paid; }
+  isProtected(p) { return p.deadEra === this.era || p.kidnappedEra >= 0 && (p.kidnappedEra === this.era || p.kidnappedEra === this.era-1 && p.turnEndedEra !== this.era); }
   left(p) { const i = this.players.indexOf(p); return this.players[(i + 1) % this.n]; }
   say(s) { const t = `[ยุค ${this.era}] ${s}`; this.log.push(t); if (this.rec) this.ev.push({ t: 'log', text: t }); }
   rl(p, n, label) {
@@ -82,10 +105,10 @@ class Game {
     if (w.fx === 'sol1') p.soldiers = Math.min(4, p.soldiers + 1);
     if (w.fx === 'sol2') p.soldiers = Math.min(4, p.soldiers + 2);
     if (w.fx === 'gold1') p.money++;
-    if (w.fx === 'up') { if (p.rank < 3 && !this.seatsFull(p.rank + 1)) p.rank++; else p.inf += 2; }
+    if (w.fx === 'up') { if (p.rank < 3 && !this.seatsFull(p.rank + 1)) p.rank++; else this.gainInf(p,2); }
     this.say(`${p.name} แต่งงานกับ ${w.name}`);
   }
-  pubScore(p) { return [0, 1, 3, 5, 0][p.rank - 1] + Math.min(8, Math.floor(p.inf / 2)) + (p.heir ? 2 : 0) + Math.min(3, Math.floor(p.money / 5)) - (p.unrest >= 4 ? 1 : 0); }
+  pubScore(p) { return [0, 1, 3, 5, 0][p.rank - 1] + Math.min(8, Math.floor(this.netInf(p) / 2)) + (p.heir ? 2 : 0) + Math.min(3, Math.floor(p.money / 5)) - (p.unrest >= 4 ? 1 : 0); }
   finalScore() { // ข้อ 5ก: คะแนนราชวงศ์ (+ การ์ดความลับที่ยังถือแบบจับคู่ศูนย์รวม)
     for (const p of this.players) { p.sec = 0; }
     for (const h of this.players) for (const c of h.secrets) {
@@ -93,13 +116,15 @@ class Game {
       const pts = c.v === 3 ? 2 : 1; h.sec += pts; this.P(c.about).sec -= pts;
     }
     for (const p of this.players) { p.total = this.pubScore(p) + p.sec; this.say(`คะแนนราชวงศ์ ${p.name}: ${p.total} (สถานะ ${this.pubScore(p)}, ความลับ ${p.sec >= 0 ? '+' : ''}${p.sec})`); }
-    this.winner = [...this.players].sort((a, b) => b.total - a.total || b.rank - a.rank || b.inf - a.inf || b.money - a.money)[0];
-    this.say(`จบ 7 ยุค ผู้ชนะ: ${this.winner.name}`);
+    const compare = (a,b) => b.total-a.total || b.rank-a.rank || this.netInf(b)-this.netInf(a) || b.money-a.money;
+    this.winner = [...this.players].sort(compare)[0];
+    this.winners = this.players.filter(p => compare(p,this.winner) === 0);
+    this.say(`จบ 7 ยุค ผู้ชนะ${this.winners.length>1?'ร่วมกัน':''}: ${this.winners.map(p=>p.name).join(', ')}`);
   }
 
   botPlan(p) {
     const others = this.players.filter(q => q !== p), slots = SLOTS[p.rank - 1], out = [];
-    const top = [...others].sort((a, b) => b.rank - a.rank || b.inf - a.inf)[0];
+    const top = [...others].sort((a, b) => b.rank - a.rank || this.netInf(b) - this.netInf(a))[0];
     const payAmt = p.money >= 5 ? 2 : p.money >= 3 ? 1 : 0, cost = this.n === 3 ? 3 : 2;
     const can = {
       petition: () => p.rank < 5 && { type: 'petition', pay: payAmt },
@@ -133,7 +158,7 @@ class Game {
   has(p, type) { return p.envelope.some(c => c.type === type && !c.opened); }
   reveal(p, type) { const c = p.envelope.find(c => c.type === type && !c.opened); if (!c) return false; c.opened = true; p.used.push(type); return true; }
   startEra(now = Date.now()) {
-    if (this.winner) return false;
+    if (this.winner || !this.allLeadersChosen()) return false;
     this.era++; this.phase = 'negotiation'; this.pending = null; this.ev = []; this.rec = true;
     this.flags = {}; this.eventName = this.eventDeck.pop(); this.flags[this.eventName] = true;
     this.deadline = now + (this.n >= 5 ? 180000 : 120000);
@@ -169,10 +194,22 @@ class Game {
   allIn() { return this.players.every(p => p.placed !== null); }
   beginTurns() {
     if (this.phase !== 'placement' || !this.allIn()) return false;
-    const order = this.players.map(p => ({ p, tie: R(6) + 1, extra: Math.random() }));
-    order.sort((a,b) => a.p.rank - b.p.rank || b.p.inf - a.p.inf || b.tie - a.tie || a.extra - b.extra);
-    this.turnOrder = order.map(x => x.p.id); this.turnIndex = 0; this.phase = 'turns';
-    this.say(`ลำดับตาล็อก: ${order.map(x => x.p.name).join(' → ')}`); return true;
+    const sorted = [...this.players].sort((a,b) => a.rank-b.rank || this.netInf(b)-this.netInf(a));
+    const order = [];
+    for (let i=0;i<sorted.length;) {
+      let end=i+1;
+      while(end<sorted.length && sorted[end].rank===sorted[i].rank && this.netInf(sorted[end])===this.netInf(sorted[i])) end++;
+      order.push(...this.tieOrder(sorted.slice(i,end))); i=end;
+    }
+    this.turnOrder = order.map(p => p.id); this.turnIndex = 0; this.phase = 'turns';
+    this.say(`ลำดับตาล็อก: ${order.map(p => p.name).join(' → ')}`); return true;
+  }
+  tieDie(p) { const face=R(6)+1; if(this.rec)this.ev.push({t:'roll',pid:p.id,name:p.name,label:'ทอยจัดลำดับตา',n:1,faces:[face],s:face,turnOrder:true});return face; }
+  tieOrder(group) {
+    if(group.length<2)return group;
+    const buckets = new Map();
+    for(const p of group){const face=this.tieDie(p);if(!buckets.has(face))buckets.set(face,[]);buckets.get(face).push(p);}
+    return [...buckets.keys()].sort((a,b)=>b-a).flatMap(face=>this.tieOrder(buckets.get(face)));
   }
   act(id, input) {
     const p = this.P(id), o = input && { ...input, owner: id };
@@ -193,7 +230,7 @@ class Game {
       this.pending = { kind: 'lobby', actor: id, order: o, queue: this.turnOrder.filter(pid => pid !== id && this.has(this.P(pid),'lobby')), index: 0 };
       this.advanceLobby();
     } else if (!isPublic) {
-      if (o.type === 'kidnap' && (!t.heir || p.captive) || o.type === 'assassinate' && (o.opt === 'heir' ? !t.heir : t.deadEra === this.era || t.kidnappedEra === this.era)) { this.say('เป้าหมายไม่พร้อมหรือผู้นำได้รับการคุ้มครอง ช่องที่เปิดเสียไป'); return true; }
+      if (o.type === 'kidnap' && (!t.heir || p.captive) || o.type === 'assassinate' && (o.opt === 'heir' ? !t.heir : this.isProtected(t))) { this.say('เป้าหมายไม่พร้อมหรือผู้นำได้รับการคุ้มครอง ช่องที่เปิดเสียไป'); return true; }
       if (o.type === 'assassinate') { const cost = this.n === 3 ? 3 : 2; if (p.money < cost) return true; p.money -= cost; }
       this.pending = { kind: 'defense', actor: id, responder: t.id, order: o };
     } else if (o.type === 'realm') {
@@ -212,7 +249,11 @@ class Game {
     const p = this.P(id), a = this.P(q.actor);
     if (q.kind === 'lobby') {
       if (!['support','oppose','pass'].includes(data.choice)) return false;
-      if (data.choice !== 'pass' && this.reveal(p,'lobby')) a.lobby += data.choice === 'oppose' ? -2 : 2;
+      if (data.choice !== 'pass' && this.reveal(p,'lobby')) {
+        a.lobby += data.choice === 'oppose' ? -2 : 2;
+        p.lobbyAction = { era:this.era,target:q.actor,choice:data.choice };
+        for(const f of this.favors)if(f.debtor===id && f.called===this.era && f.terms.kind==='lobby' && f.terms.target===q.actor && f.terms.choice===data.choice)f.fulfilled=true;
+      }
       q.index++; this.advanceLobby(); return true;
     }
     if (q.kind === 'petition') { this.pending = null; this.petition(p,{...q.order,pay:amount(data.pay),soldiers:amount(data.soldiers)}); return true; }
@@ -252,7 +293,7 @@ class Game {
       } else if (r.s === 0) this.giveSecret(t,1,p.id);
     } else if (o.type === 'kidnap' && r.win) {
       p.captive = {owner:t.id,heir:t.heir}; t.capt = {by:p.id}; t.heir = null; t.kidnappedEra = this.era;
-      this.addU(t,1); this.say(`${p.name} ลักพาตัวทายาทของ ${t.name} · ผู้นำคุ้มครองจนจบยุค`);
+      this.addU(t,1); this.say(`${p.name} ลักพาตัวทายาทของ ${t.name} · ผู้นำคุ้มครองจนเหยื่อจบตาในยุค ${this.era+1}`);
     } else if (o.type === 'assassinate') {
       if (r.win) { p.inf = Math.max(0,p.inf-1); if(o.opt==='heir'){this.discard(t.heir);t.heir=null;this.fixFamily(t);}else{this.die(t,'kill');p.bonus++;} }
       else if(r.s===0) this.giveSecret(t,3,p.id);
@@ -260,10 +301,10 @@ class Game {
     this.say(`${p.name} ${o.type}: ${r.s} ต่อ ${r.d} · ${r.win?'สำเร็จ':'ล้มเหลว'}`);
   }
   familyAction(p,o) {
-    if(o.opt==='adopt'){if(p.heir||p.capt||p.money<4)return;p.money-=4;p.heir=this.drawHeir();this.fixFamily(p);}
+    if(o.opt==='adopt'){if(p.heir||p.capt||p.money<4)return;const card=this.drawHeir();if(!card)return;p.money-=4;p.heir=card;this.fixFamily(p);}
     else if(o.opt==='train'){if(p.heir && p.heir.b[o.stat]+p.heir.t[o.stat]<5)p.heir.t[o.stat]++;}
     else if(o.opt==='breed'){
-      if(!p.wife || (p.heir || p.capt) && p.spare)return;
+      if(!p.wife || p.heir || p.capt)return;
       const cards=Array.from({length:p.wife.fert},()=>this.drawHeir()).filter(Boolean);
       if(cards.length)this.pending={kind:'birth',actor:p.id,responder:p.id,cards,keepSpare:p.wife.fert===3};
     }else this.takeWife(p,amount(o.wife,2));
@@ -275,11 +316,11 @@ class Game {
     const got=this.rl(p,dice,`ขอเลื่อนยศ ต้องได้ ${need}`);this.say(`${p.name} ขอเลื่อนยศ ${got}/${need}`);
     if(got<need)return;
     if(full && p.rank<4){const v=this.P(o.victim);if(v && v.rank===p.rank+1)v.rank--;}
-    p.rank++;p.inf+=2;if(p.rank===5){this.winner=p;this.phase='over';this.say(`${p.name} เป็นจักรพรรดิ`);}
+    p.rank++;this.gainInf(p,2);if(p.rank===5){this.winner=p;this.winners=[p];this.phase='over';this.say(`${p.name} เป็นจักรพรรดิ`);}
   }
   rebel(p) {
     // A rebellion can interrupt any action. Queue it until that action's own response is complete.
-    (this.rebellions ||= []).push(p.id); p.unrest=Math.min(6,p.unrest);
+    this.rebellions ||= []; if(!this.rebellions.includes(p.id))this.rebellions.push(p.id); p.unrest=Math.min(6,p.unrest);
   }
   checkRebellion() {
     if(this.pending || !this.rebellions?.length)return false;
@@ -287,10 +328,10 @@ class Game {
   }
   resolveRebellion(id,data={}) {
     if(this.pending?.kind!=='rebellion'||this.pending.responder!==id)return false;
-    const p=this.P(id),use=Math.min(amount(data.soldiers),p.soldiers),pay=Math.min(amount(data.pay),p.money);
-    p.soldiers-=use;p.money-=pay;this.pending=null;
-    const a=this.rl(p,stat(p,'m')+hb(p,'m')+use+pay,'ปราบกบฏ'),b=this.rl(p,p.unrest,'ฝ่ายกบฏ');
-    if(a>=b){p.unrest=1;p.inf++;}else{p.rank=Math.max(1,p.rank-1);p.money=Math.max(0,p.money-3);p.inf=Math.max(0,p.inf-1);p.unrest=2;}
+    const p=this.P(id),use=Math.min(amount(data.soldiers),p.soldiers);
+    p.soldiers-=use;this.pending=null;
+    const a=this.rl(p,stat(p,'m')+hb(p,'m')+use,'ปราบกบฏ'),b=this.rl(p,p.unrest,'ฝ่ายกบฏ');
+    if(a>=b){p.unrest=1;this.gainInf(p,1);}else{p.rank=Math.max(1,p.rank-1);p.money=Math.max(0,p.money-3);p.inf=Math.max(0,p.inf-1);p.unrest=2;}
     this.say(`${p.name} ${a>=b?'ชนะ':'แพ้'}กบฏ`);return true;
   }
   die(p,cause) {
@@ -302,7 +343,7 @@ class Game {
   }
   endTurn(id) {
     if(this.phase!=='turns'||this.active()!==id||this.pending)return false;
-    this.turnIndex++;if(this.turnIndex===this.n)this.beginEnd();return true;
+    this.P(id).turnEndedEra=this.era;this.turnIndex++;if(this.turnIndex===this.n)this.beginEnd();return true;
   }
   beginEnd() {
     this.phase='aging'; const base=this.era>=4?[1,1,1,2][this.era-4]:0,lv=base+(this.flags.plague?1:0);
@@ -312,9 +353,9 @@ class Game {
   bribe(id,n) { const p=this.P(id);if(!p||this.phase!=='end'||p.ready)return false;const k=Math.min(amount(n,2-p.bribe),p.money,p.unrest);p.money-=k;p.unrest-=k;p.bribe+=k;return true; }
   finishEra() {
     if(this.phase!=='end'||!this.allReady())return false;
-    for(const f of this.favors)if(f.called===this.era && !f.fulfilled){const p=this.P(f.debtor);p.inf=Math.max(0,p.inf-1);f.fulfilled=true;this.say(`${p.name} ผิดสัญญาบุญคุณ บารมี −1`);}
+    for(const f of this.favors)if(f.called===this.era && !f.fulfilled){const p=this.P(f.debtor);this.penalizeFavor(p);f.fulfilled=true;this.say(`${p.name} ผิดสัญญาบุญคุณ บารมี −2 · โทษค้าง ${p.favorDebt}`);}
     this.favors=this.favors.filter(f=>f.called!==this.era);
-    this.hist.push({era:this.era,p:this.players.map(p=>({id:p.id,r:p.rank,i:p.inf,m:p.money,u:p.unrest}))});
+    this.hist.push({era:this.era,p:this.players.map(p=>({id:p.id,r:p.rank,i:this.netInf(p),m:p.money,u:p.unrest}))});
     for(const p of this.players){p.envelope=[];p.placed=null;this.fixFamily(p);}
     if(this.era>=7){this.finalScore();this.phase='over';}else this.phase='between';return true;
   }
@@ -326,30 +367,42 @@ class Game {
     else if(t.money>=c.v*2){t.money-=c.v*2;p.money+=c.v*2;}else t.inf=Math.max(0,t.inf-c.v);
     this.discardSecret(p,index);p.usedSec=this.era;p.bonus++;this.say(`${p.name} ใช้ความลับ ${mode} กับ ${t.name}`);return true;
   }
-  feast(id) { const p=this.P(id);if(!p||!this.flags.feast||this.pending||!['negotiation','placement','turns'].includes(this.phase)||p.money<2)return false;p.money-=2;p.inf++;return true; }
+  feast(id) { const p=this.P(id);if(!p||!this.flags.feast||this.pending||!['negotiation','placement','turns'].includes(this.phase)||p.money<2)return false;p.money-=2;this.gainInf(p,1);return true; }
   offer(id,d) {
     const p=this.P(id),t=this.P(d.target);if(this.phase!=='negotiation'||this.pending||!p||!t||p===t)return false;
     const money=amount(d.money,999),secret=d.secret==null?null:amount(d.secret,2);
     if(money>p.money||secret!==null&&!p.secrets[secret]||d.release&&p.captive?.owner!==t.id||d.favor&&this.favors.length>=18)return false;
     if(this.offers.filter(o=>o.from===id).length>=5)return false;
-    this.offers.push({id:this.nextOffer++,from:id,to:t.id,money,secret:secret===null?null:p.secrets[secret],release:!!d.release,favor:!!d.favor});return true;
+    const terms = d.favor ? this.favorTerms(d.terms,t.id) : null;
+    if(d.favor && !terms)return false;
+    this.offers.push({id:this.nextOffer++,from:id,to:t.id,money,secret:secret===null?null:p.secrets[secret],release:!!d.release,favor:!!d.favor,terms});return true;
+  }
+  favorTerms(input,debtor) {
+    if(!input || typeof input !== 'object')return null;
+    if(input.kind==='lobby' && ['support','oppose'].includes(input.choice) && this.P(input.target) && input.target!==debtor)return {kind:'lobby',target:input.target,choice:input.choice};
+    if(input.kind==='other' && typeof input.text==='string' && input.text.trim())return {kind:'other',text:input.text.trim().slice(0,200)};
+    return null;
   }
   accept(id,offerId) {
     const o=this.offers.find(o=>o.id===offerId&&o.to===id),p=o&&this.P(o.from),t=this.P(id);
     if(this.phase!=='negotiation'||this.pending||!o||p.money<o.money||o.secret&&!p.secrets.includes(o.secret)||o.secret&&t.secrets.length>=3||o.release&&p.captive?.owner!==id||o.favor&&this.favors.length>=18)return false;
     p.money-=o.money;t.money+=o.money;if(o.secret){p.secrets.splice(p.secrets.indexOf(o.secret),1);t.secrets.push(o.secret);}if(o.release)this.release(p.id);
-    if(o.favor)this.favors.push({id:o.id,holder:p.id,debtor:id,called:null,fulfilled:false});
+    if(o.favor)this.favors.push({id:o.id,holder:p.id,debtor:id,called:null,fulfilled:false,terms:o.terms});
     this.offers=this.offers.filter(x=>x!==o);this.say(`${t.name} รับข้อตกลงจาก ${p.name}`);return true;
   }
   favor(id,tokenId,fulfill=false) {
     const f=this.favors.find(f=>f.id===tokenId);if(!f||this.pending||!['negotiation','turns'].includes(this.phase))return false;
-    if(fulfill&&f.debtor===id&&f.called===this.era){f.fulfilled=true;return true;}
-    if(!fulfill&&f.holder===id&&f.called===null){f.called=this.era;return true;}return false;
+    if(fulfill&&f.holder===id&&f.terms.kind==='other'&&f.called===this.era){f.fulfilled=true;return true;}
+    if(!fulfill&&f.holder===id&&f.called===null){
+      f.called=this.era;const action=this.P(f.debtor).lobbyAction;
+      if(f.terms.kind==='lobby'&&action?.era===this.era&&action.target===f.terms.target&&action.choice===f.terms.choice)f.fulfilled=true;
+      return true;
+    }return false;
   }
   botStep() {
     if(this.checkRebellion())return true;
     if(this.pending){const q=this.pending,p=this.P(q.responder);if(!p.bot)return false;
-      if(q.kind==='rebellion')return this.resolveRebellion(p.id,{soldiers:2,pay:Math.min(2,Math.max(0,p.money-3))});
+      if(q.kind==='rebellion')return this.resolveRebellion(p.id,{soldiers:2});
       if(q.kind==='destroy')return this.respond(p.id,{index:p.secrets.findIndex(c=>c.about===q.actor)});
       return this.respond(p.id,{choice:'oppose',guard:true,pay:Math.min(2,Math.max(0,p.money-3)),soldiers:2,first:0,second:1});
     }
@@ -365,15 +418,16 @@ class Game {
   }
   view(pid) {
     const own=this.P(pid),q=this.pending;
-    return {rulesVersion:'1.2',era:this.era,phase:this.phase,deadline:this.deadline,event:this.eventName,feast:!!this.flags.feast,
+    if(this.phase==='leaders')return {rulesVersion:'1.3',era:0,phase:'leaders',log:this.log,leaderChoices:this.leaderChoices.map(c=>({...c,takenBy:this.players.find(p=>p.lead?.id===c.id)?.id})),players:this.players.map(p=>({id:p.id,name:p.name,bot:p.bot,style:p.style,lead:p.lead}))};
+    return {rulesVersion:'1.3',era:this.era,phase:this.phase,deadline:this.deadline,event:this.eventName,feast:!!this.flags.feast,
       hist:this.hist,market:this.market,log:this.log.slice(-40),turnOrder:this.turnOrder,active:this.active(),usedSec:own?.usedSec===this.era,
-      assCost:this.n===3?3:2,winner:this.winner?.name,winnerId:this.winner?.id,offers:this.offers.filter(o=>o.from===pid||o.to===pid),favors:this.favors,
+      assCost:this.n===3?3:2,winner:this.winners?.map(p=>p.name).join(', ')||this.winner?.name,winnerId:this.winner?.id,winnerIds:this.winners?.map(p=>p.id)||[],offers:this.offers.filter(o=>o.from===pid||o.to===pid),favors:this.favors,
       pending:q?{kind:q.kind,actor:q.actor,responder:q.responder,...(q.order?{order:q.order}:{}),...(q.responder===pid&&q.cards?{cards:q.cards,keepSpare:q.keepSpare}:{})}:null,
       rolls:this.ev.filter(e=>e.t==='roll').slice(-4),
-      players:this.players.map(p=>({id:p.id,name:p.name,bot:p.bot,style:p.style,lead:p.lead,rank:p.rank,money:p.money,inf:p.inf,unrest:p.unrest,
+      players:this.players.map(p=>({id:p.id,name:p.name,bot:p.bot,style:p.style,lead:p.lead,rank:p.rank,money:p.money,inf:p.inf,netInf:this.netInf(p),favorDebt:p.favorDebt,unrest:p.unrest,
         st:{i:stat(p,'i'),n:stat(p,'n'),m:stat(p,'m')},hb:{i:hb(p,'i'),n:hb(p,'n'),m:hb(p,'m')},score:this.phase==='over'?p.total??this.pubScore(p):this.pubScore(p),
         wife:p.wife,heir:p.heir,heirKnown:!!p.heir,capt:p.capt,holding:p.captive?{owner:p.captive.owner}:null,ready:p.ready,secretCount:p.secrets.length,secretAbout:p.secrets.map(c=>c.about),tokensPlaced:p.envelope.length,
-        protected:p.deadEra===this.era||p.kidnappedEra===this.era,publicLeft:p.publicLeft,slots:p.slots,used:p.used,
+        protected:this.isProtected(p),protectionUntil:p.kidnappedEra>=0?p.kidnappedEra+1:null,publicLeft:p.publicLeft,slots:p.slots,used:p.used,
         revealed:p.envelope.filter(c=>c.opened).map(c=>c.type),
         ...(p.id===pid?{heir:p.heir,spare:p.spare,secrets:p.secrets,soldiers:p.soldiers,envelope:p.envelope,placed:p.placed}:{})}))};
   }

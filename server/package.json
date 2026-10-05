@@ -1,7 +1,7 @@
 {
   "name": "dynasty-server",
-  "version": "1.2.0",
-  "description": "Dynasty Online rules v1.2",
+  "version": "1.3.0",
+  "description": "Dynasty Online rules v1.3",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
