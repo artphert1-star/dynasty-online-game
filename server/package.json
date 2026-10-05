@@ -1,10 +1,11 @@
 {
   "name": "dynasty-server",
-  "version": "1.0.0",
-  "description": "Backend for Dynasty v0.8",
+  "version": "1.2.0",
+  "description": "Dynasty online \u2014 rulebook v1.2",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node test-rules.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

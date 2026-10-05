@@ -6,7 +6,7 @@ const { Game, STYLES } = require('./engine');
 
 const app = express();
 app.use(cors());
-app.get('/', (_, res) => res.send('Dynasty server OK (rules v0.8)'));
+app.use(express.static(require('path').join(__dirname, '../client')));
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*', methods: ['GET', 'POST'] } });
 
@@ -41,11 +41,21 @@ function nextEra(room) {
 }
 // ทุกคนวางคำสั่งครบ -> เปิดคำสั่ง + หน้าต่างความลับ (ข้อ 7) -> เมื่อทุกคนพร้อมจึงแก้ผล
 function afterSubmit(room) {
-  const g = room.game;
-  if (!g || g.phase !== 'orders' || !g.allIn() || room.replay || room.win) return;
-  g.openWindow();
-  room.win = setTimeout(() => closeWindow(room), 60000);
-  broadcast(room); checkWindow(room);
+ const g=room.game;if(!g)return;
+ if(g.phase==='orders'&&g.allIn())g.openWindow();
+ pump(room);broadcast(room);
+}
+function pump(room){
+ const g=room.game;let limit=100;
+ while(limit--&&!g.winner){
+  if(g.pending&&g.pending.kind==='heir'){const p=g.P(g.pending.owner);if(!p.bot)break;g.chooseHeir(p.id,0,1);continue;}
+  if(g.pending){const id=g.pending.responders[g.pending.idx],p=g.P(id);if(!p.bot)break;g.respond(id,{guard:true,pay:Math.min(2,Math.max(0,p.money-3)),lobby:'oppose'});continue;}
+  if(g.phase==='turns'){const p=g.P(g.active());if(!p.bot)break;
+   const o=g.botPlan(p).find(o=>!p.used.includes(o.type)&&(['petition','realm','family'].includes(o.type)?p.actions>0:['intrigue','kidnap','assassinate'].includes(o.type)&&p.placed.some(c=>c.type===o.type&&!c.opened&&!c.cancelled)));
+   if(o){o.opt=o.opt==='tryst'?'spy':o.opt;o.soldiers=Math.min(2,p.soldiers);g.action(p.id,o);}else g.endTurn(p.id);continue;}
+  if(g.phase==='end'){g.players.filter(p=>p.bot).forEach(p=>{p.bribe=Math.min(2,p.unrest,p.money);p.ready=true;});if(g.finishEra()&&!g.winner){setTimeout(()=>{if(room.game===g&&g.phase==='between')nextEra(room);},2500);}break;}
+  break;
+ }
 }
 function checkWindow(room) { const g = room.game; if (g && g.phase === 'window' && room.win && g.allReady()) closeWindow(room); }
 function closeWindow(room) { if (!room.win) return; clearTimeout(room.win); room.win = null; startReplay(room); }
@@ -147,15 +157,25 @@ io.on('connection', socket => {
   socket.on('court', ({ code, choice }) => { const { room, pid, g } = find(code, socket); if (g && g.phase === 'orders') { g.court(pid, choice === 'A' ? 'A' : 'B'); broadcast(room); } });
   socket.on('secret', ({ code, idx, mode, tok }) => {
     const { room, pid, g } = find(code, socket);
-    if (g && g.useSecret(pid, idx | 0, mode, tok == null ? -1 : +tok)) { broadcast(room); checkWindow(room); }
+    if (g && g.useSecret(pid, idx | 0, mode, tok == null ? -1 : +tok)) { broadcast(room); }
   });
-  socket.on('ready', code => { const { room, pid, g } = find(code, socket); if (g && g.phase === 'window') { g.setReady(pid); broadcast(room); checkWindow(room); } });
+  socket.on('ready', code => {const {room,pid,g}=find(code,socket);if(!g)return;
+ if(g.phase==='negotiation'){g.setReady(pid);if(g.allReady())g.beginPlacement();}
+ else if(g.phase==='end')g.setReady(pid);
+ afterSubmit(room);
+ });
+ socket.on('action', ({code,order})=>{const {room,pid,g}=find(code,socket);if(g&&g.action(pid,order)){pump(room);broadcast(room);}});
+ socket.on('respond', data=>{const {room,pid,g}=find(data.code,socket);if(g&&g.respond(pid,data)){pump(room);broadcast(room);}});
+ socket.on('endTurn', code=>{const {room,pid,g}=find(code,socket);if(g&&g.endTurn(pid)){pump(room);broadcast(room);}});
+ socket.on('trade', data=>{const {room,pid,g}=find(data.code,socket);if(g&&g.trade(pid,data))broadcast(room);});
+ socket.on('favor', data=>{const {room,pid,g}=find(data.code,socket);if(g&&g.favor(pid,data.idx,data.fulfill))broadcast(room);});
+ socket.on('heirChoice', data=>{const {room,pid,g}=find(data.code,socket);if(g&&g.chooseHeir(pid,data.pick,data.spare)){pump(room);broadcast(room);}});
   socket.on('ransom', code => { const { room, pid, g } = find(code, socket); if (g && !room.replay && g.phase !== 'resolve' && g.ransom(pid)) broadcast(room); });
   socket.on('release', code => { const { room, pid, g } = find(code, socket); if (g && !room.replay && g.phase !== 'resolve' && g.release(pid)) broadcast(room); });
   socket.on('feast', code => { const { room, pid, g } = find(code, socket); if (g && g.feast(pid)) broadcast(room); });
-  socket.on('opts', ({ code, defPay, bribe, rejectChild }) => {
-    const { room, pid, g } = find(code, socket); if (!g) return;
-    const p = g.P(pid); p.defPay = Math.max(0, Math.min(2, defPay | 0)); p.bribe = Math.max(0, Math.min(2, bribe | 0)); p.rejectChild = !!rejectChild;
+  socket.on('opts', ({ code, defPay, bribe, rejectChild, rebelSoldiers }) => {
+    const { room, pid, g } = find(code, socket); if (!g || !g.P(pid)) return;
+    const p = g.P(pid); p.defPay = Math.max(0, Math.min(2, defPay | 0)); p.bribe = Math.max(0, Math.min(2, bribe | 0)); p.rejectChild = !!rejectChild; p.rebelSoldiers=Math.max(0,Math.min(2,rebelSoldiers|0));
   });
 });
 
